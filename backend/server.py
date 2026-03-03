@@ -10,8 +10,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from database import get_db
-from models import User, Merchant
+from models import User, Merchant, Product
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
+from sqlalchemy import func
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -165,6 +166,61 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "user_type": current_user.user_type,
         "merchant_id": str(current_user.merchant_id) if current_user.merchant_id else None,
         "preferred_language": current_user.preferred_language
+    }
+
+# Dashboard Routes
+@api_router.get("/dealer/dashboard/stats")
+async def get_dashboard_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get dashboard statistics for dealer"""
+    if current_user.user_type != "dealer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only dealers can access this endpoint"
+        )
+    
+    merchant_id = current_user.merchant_id
+    
+    # Total products
+    total_products = db.query(func.count(Product.id)).filter(
+        Product.merchant_id == merchant_id
+    ).scalar()
+    
+    # Active products
+    active_products = db.query(func.count(Product.id)).filter(
+        Product.merchant_id == merchant_id,
+        Product.is_active == True
+    ).scalar()
+    
+    # Low stock items (quantity < 20)
+    low_stock = db.query(func.count(Product.id)).filter(
+        Product.merchant_id == merchant_id,
+        Product.current_quantity < 20,
+        Product.current_quantity > 0
+    ).scalar()
+    
+    # Out of stock items
+    out_of_stock = db.query(func.count(Product.id)).filter(
+        Product.merchant_id == merchant_id,
+        Product.current_quantity == 0
+    ).scalar()
+    
+    # Total inventory value (sum of price * quantity)
+    inventory_value = db.query(
+        func.sum(Product.current_price * Product.current_quantity)
+    ).filter(
+        Product.merchant_id == merchant_id
+    ).scalar() or 0
+    
+    return {
+        "total_products": total_products or 0,
+        "active_products": active_products or 0,
+        "low_stock_items": low_stock or 0,
+        "out_of_stock_items": out_of_stock or 0,
+        "inventory_value": float(inventory_value),
+        "recent_activity": []
     }
 
 # Health check

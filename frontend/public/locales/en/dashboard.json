@@ -1,0 +1,29 @@
+{
+  "title": "Dashboard",
+  "welcome_back": "Welcome back",
+  "overview": "Overview",
+  "total_products": "Total Products",
+  "active_products": "Active Products",
+  "low_stock_items": "Low Stock Items",
+  "out_of_stock": "Out of Stock",
+  "total_revenue": "Total Revenue",
+  "this_month": "This Month",
+  "recent_activity": "Recent Activity",
+  "quick_actions": "Quick Actions",
+  "add_product": "Add Product",
+  "view_inventory": "View Inventory",
+  "view_orders": "View Orders",
+  "no_activity": "No recent activity",
+  "product_added": "Product added",
+  "product_updated": "Product updated",
+  "product_deleted": "Product deleted",
+  "nav": {
+    "dashboard": "Dashboard",
+    "inventory": "Inventory",
+    "orders": "Orders",
+    "subdealers": "Sub-dealers",
+    "analytics": "Analytics",
+    "profile": "Profile",
+    "logout": "Logout"
+  }
+}

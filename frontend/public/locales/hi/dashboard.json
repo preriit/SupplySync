@@ -1,0 +1,26 @@
+{
+  "title": "डैशबोर्ड",
+  "welcome_back": "वापसी पर स्वागत है",
+  "overview": "अवलोकन",
+  "total_products": "कुल उत्पाद",
+  "active_products": "सक्रिय उत्पाद",
+  "low_stock_items": "कम स्टॉक आइटम",
+  "out_of_stock": "स्टॉक में नहीं",
+  "total_revenue": "कुल राजस्व",
+  "this_month": "इस महीने",
+  "recent_activity": "हाल की गतिविधि",
+  "quick_actions": "त्वरित कार्रवाई",
+  "add_product": "उत्पाद जोड़ें",
+  "view_inventory": "इन्वेंटरी देखें",
+  "view_orders": "ऑर्डर देखें",
+  "no_activity": "कोई हालिया गतिविधि नहीं",
+  "nav": {
+    "dashboard": "डैशबोर्ड",
+    "inventory": "इन्वेंटरी",
+    "orders": "ऑर्डर",
+    "subdealers": "सब-डीलर",
+    "analytics": "विश्लेषण",
+    "profile": "प्रोफ़ाइल",
+    "logout": "लॉगआउट"
+  }
+}
