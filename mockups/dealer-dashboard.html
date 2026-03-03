@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dealer Dashboard - SupplySync</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            DEFAULT: '#EA580C',
+                            dark: '#C2410C',
+                            light: '#FB923C',
+                        },
+                        slate: {
+                            DEFAULT: '#0F172A',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200">
+        <div class="max-w-[1920px] mx-auto px-8 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-8">
+                    <h1 class="text-2xl font-bold text-primary">SupplySync</h1>
+                    <nav class="flex space-x-6">
+                        <a href="#" class="text-slate font-semibold border-b-2 border-primary pb-1">Dashboard</a>
+                        <a href="#" class="text-gray-600 hover:text-slate">Inventory</a>
+                        <a href="#" class="text-gray-600 hover:text-slate">Sub-dealers</a>
+                        <a href="#" class="text-gray-600 hover:text-slate">Orders</a>
+                        <a href="#" class="text-gray-600 hover:text-slate">Analytics</a>
+                    </nav>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button class="relative">
+                        <span class="text-2xl">🔔</span>
+                        <span class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
+                    </button>
+                    <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white font-semibold">
+                        DL
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-[1920px] mx-auto px-8 py-8">
+        <div class="mb-6">
+            <h2 class="text-3xl font-bold text-slate">Welcome back, ABC Tiles! 👋</h2>
+            <p class="text-gray-600 mt-1">Here's what's happening with your business today.</p>
+        </div>
+
+        <!-- Bento Grid -->
+        <div class="grid grid-cols-12 gap-6">
+            <!-- Pending Orders - Hero (Top Left) -->
+            <div class="col-span-4 row-span-2 bg-white rounded-lg shadow-sm p-6 border-2 border-primary">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-slate">Pending Orders</h3>
+                    <span class="text-3xl">📋</span>
+                </div>
+                <div class="text-5xl font-bold text-primary mb-6">5</div>
+                <div class="space-y-3">
+                    <div class="bg-gray-50 rounded-lg p-4 hover:bg-orange-50 transition cursor-pointer">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <p class="font-semibold text-slate">Order #ORD-2026-045</p>
+                                <p class="text-sm text-gray-600">XYZ Traders</p>
+                            </div>
+                            <span class="text-xs text-gray-500">2h ago</span>
+                        </div>
+                        <p class="text-sm text-gray-700 mb-3">3 items • ₹83,780</p>
+                        <div class="flex space-x-2">
+                            <button class="flex-1 bg-green-500 text-white text-sm py-2 rounded hover:bg-green-600">Approve</button>
+                            <button class="flex-1 border border-gray-300 text-gray-700 text-sm py-2 rounded hover:bg-gray-50">Reject</button>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-4 hover:bg-orange-50 transition cursor-pointer">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <p class="font-semibold text-slate">Order #ORD-2026-044</p>
+                                <p class="text-sm text-gray-600">PQR Distributors</p>
+                            </div>
+                            <span class="text-xs text-gray-500">5h ago</span>
+                        </div>
+                        <p class="text-sm text-gray-700 mb-3">2 items • ₹45,200</p>
+                        <div class="flex space-x-2">
+                            <button class="flex-1 bg-green-500 text-white text-sm py-2 rounded hover:bg-green-600">Approve</button>
+                            <button class="flex-1 border border-gray-300 text-gray-700 text-sm py-2 rounded hover:bg-gray-50">Reject</button>
+                        </div>
+                    </div>
+                </div>
+                <button class="mt-4 w-full text-primary font-semibold text-sm hover:underline">View All Orders →</button>
+            </div>
+
+            <!-- Revenue This Month -->
+            <div class="col-span-4 bg-white rounded-lg shadow-sm p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-slate">Revenue This Month</h3>
+                    <span class="text-2xl">💰</span>
+                </div>
+                <div class="text-4xl font-bold text-slate mb-2">₹5.2L</div>
+                <p class="text-sm text-green-600 flex items-center">
+                    <span class="mr-1">↑</span> 12% from last month
+                </p>
+                <div class="mt-4 h-24 bg-gradient-to-r from-orange-100 to-orange-50 rounded flex items-end justify-around px-2">
+                    <div class="w-8 bg-primary rounded-t" style="height: 40%"></div>
+                    <div class="w-8 bg-primary rounded-t" style="height: 60%"></div>
+                    <div class="w-8 bg-primary rounded-t" style="height: 80%"></div>
+                    <div class="w-8 bg-primary rounded-t" style="height: 50%"></div>
+                    <div class="w-8 bg-primary rounded-t" style="height: 90%"></div>
+                </div>
+            </div>
+
+            <!-- Active Sub-dealers -->
+            <div class="col-span-4 bg-white rounded-lg shadow-sm p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-slate">Active Sub-dealers</h3>
+                    <span class="text-2xl">👥</span>
+                </div>
+                <div class="text-4xl font-bold text-slate mb-2">8</div>
+                <p class="text-sm text-green-600 flex items-center">
+                    <span class="mr-1">+</span> 3 new this month
+                </p>
+                <button class="mt-4 w-full bg-primary text-white py-2 rounded font-semibold hover:bg-primary-dark">
+                    Invite Sub-dealer
+                </button>
+            </div>
+
+            <!-- Total Products -->
+            <div class="col-span-2 bg-white rounded-lg shadow-sm p-6">
+                <div class="text-center">
+                    <span class="text-3xl mb-2 block">📦</span>
+                    <div class="text-3xl font-bold text-slate mb-1">549</div>
+                    <p class="text-sm text-gray-600">Total Products</p>
+                </div>
+            </div>
+
+            <!-- Low Stock Alerts -->
+            <div class="col-span-2 bg-amber-50 border border-amber-200 rounded-lg shadow-sm p-6">
+                <div class="text-center">
+                    <span class="text-3xl mb-2 block">⚠️</span>
+                    <div class="text-3xl font-bold text-amber-600 mb-1">12</div>
+                    <p class="text-sm text-gray-700">Low Stock</p>
+                </div>
+            </div>
+
+            <!-- Order Requests Timeline -->
+            <div class="col-span-8 bg-white rounded-lg shadow-sm p-6">
+                <h3 class="text-lg font-semibold text-slate mb-4">Order Requests - Last 7 Days</h3>
+                <div class="h-48 flex items-end justify-between space-x-2">
+                    <div class="flex-1 flex flex-col items-center">
+                        <div class="w-full bg-orange-200 rounded-t" style="height: 40%"></div>
+                        <span class="text-xs text-gray-500 mt-2">Mon</span>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center">
+                        <div class="w-full bg-orange-300 rounded-t" style="height: 60%"></div>
+                        <span class="text-xs text-gray-500 mt-2">Tue</span>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center">
+                        <div class="w-full bg-primary rounded-t" style="height: 80%"></div>
+                        <span class="text-xs text-gray-500 mt-2">Wed</span>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center">
+                        <div class="w-full bg-orange-300 rounded-t" style="height: 50%"></div>
+                        <span class="text-xs text-gray-500 mt-2">Thu</span>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center">
+                        <div class="w-full bg-orange-200 rounded-t" style="height: 70%"></div>
+                        <span class="text-xs text-gray-500 mt-2">Fri</span>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center">
+                        <div class="w-full bg-orange-100 rounded-t" style="height: 30%"></div>
+                        <span class="text-xs text-gray-500 mt-2">Sat</span>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center">
+                        <div class="w-full bg-orange-100 rounded-t" style="height: 20%"></div>
+                        <span class="text-xs text-gray-500 mt-2">Sun</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="col-span-12 bg-white rounded-lg shadow-sm p-6">
+                <h3 class="text-lg font-semibold text-slate mb-4">Recent Activity</h3>
+                <div class="space-y-3">
+                    <div class="flex items-start space-x-3 p-3 hover:bg-gray-50 rounded">
+                        <span class="text-2xl">✅</span>
+                        <div class="flex-1">
+                            <p class="text-sm text-slate"><span class="font-semibold">Order #ORD-2026-043</span> approved</p>
+                            <p class="text-xs text-gray-500">XYZ Traders • 1 hour ago</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start space-x-3 p-3 hover:bg-gray-50 rounded">
+                        <span class="text-2xl">👤</span>
+                        <div class="flex-1">
+                            <p class="text-sm text-slate"><span class="font-semibold">New access request</span> from LMN Retailers</p>
+                            <p class="text-xs text-gray-500">2 hours ago</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start space-x-3 p-3 hover:bg-gray-50 rounded">
+                        <span class="text-2xl">📦</span>
+                        <div class="flex-1">
+                            <p class="text-sm text-slate"><span class="font-semibold">Product added:</span> Kajaria Glossy White 12x12</p>
+                            <p class="text-xs text-gray-500">3 hours ago</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</body>
+</html>
