@@ -3,11 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import DealerNav from '../components/DealerNav';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, Grid3x3, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 import api from '../utils/api';
 
 const AddSubCategory = () => {
@@ -64,8 +63,11 @@ const AddSubCategory = () => {
       if (response.data.exists) {
         setMessage({
           type: 'warning',
-          text: response.data.message
+          text: response.data.message + '. You can now add products to it!'
         });
+        setTimeout(() => {
+          navigate('/dealer/inventory');
+        }, 2000);
       } else {
         setMessage({
           type: 'success',
@@ -85,131 +87,143 @@ const AddSubCategory = () => {
     }
   };
 
+  const handleReset = () => {
+    setSelectedSize('');
+    setSelectedMakeType('');
+    setMessage(null);
+  };
+
   return (
     <div className="min-h-screen bg-grey-50">
       <DealerNav />
       
-      <div className="max-w-3xl mx-auto px-4 py-8">
+      <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Back Button */}
         <Button
           variant="ghost"
           onClick={() => navigate('/dealer/inventory')}
-          className="mb-6"
+          className="mb-6 text-orange hover:text-orange-dark"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Categories
+          Back
         </Button>
 
         {/* Form Card */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl font-display flex items-center space-x-3">
-              <div className="w-10 h-10 bg-orange-light rounded-lg flex items-center justify-center">
-                <Grid3x3 className="h-5 w-5 text-orange" />
-              </div>
-              <span>Add Tile Category</span>
+          <CardHeader className="text-center">
+            <CardTitle className="text-3xl font-display">
+              Add Category
             </CardTitle>
-            <CardDescription>
-              Select tile size and make type to create a new category
-            </CardDescription>
           </CardHeader>
 
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-8">
               {/* Alert Messages */}
               {message && (
-                <Alert variant={message.type === 'error' ? 'destructive' : 'default'}>
+                <Alert variant={message.type === 'error' ? 'destructive' : 'default'}
+                  className={message.type === 'success' ? 'bg-green-50 border-green-200' : message.type === 'warning' ? 'bg-yellow-50 border-yellow-200' : ''}>
                   {message.type === 'success' && <CheckCircle2 className="h-4 w-4 text-green-600" />}
                   {message.type === 'warning' && <AlertCircle className="h-4 w-4 text-yellow-600" />}
                   {message.type === 'error' && <AlertCircle className="h-4 w-4" />}
-                  <AlertDescription>{message.text}</AlertDescription>
+                  <AlertDescription className={message.type === 'success' ? 'text-green-800' : message.type === 'warning' ? 'text-yellow-800' : ''}>
+                    {message.text}
+                  </AlertDescription>
                 </Alert>
               )}
 
-              {/* Tile Size */}
-              <div className="space-y-2">
-                <Label htmlFor="size">Tile Size *</Label>
-                <Select value={selectedSize} onValueChange={setSelectedSize}>
-                  <SelectTrigger id="size">
-                    <SelectValue placeholder="Select tile size" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sizes.map((size) => (
-                      <SelectItem key={size.value} value={size.value}>
-                        {size.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Common tile sizes in inches (with mm equivalents)
-                </p>
+              {/* SIZE - Radio Buttons */}
+              <div className="space-y-3">
+                <Label className="text-lg font-semibold text-slate flex items-center">
+                  <span className="text-orange mr-2">*</span>
+                  SIZE
+                </Label>
+                <div className="grid grid-cols-4 gap-3">
+                  {sizes.map((size) => (
+                    <label
+                      key={size.value}
+                      className={`
+                        flex items-center justify-center p-3 border-2 rounded-lg cursor-pointer transition-all
+                        ${selectedSize === size.value 
+                          ? 'border-orange bg-orange-50 text-orange font-semibold' 
+                          : 'border-gray-300 hover:border-orange-light hover:bg-gray-50'
+                        }
+                      `}
+                    >
+                      <input
+                        type="radio"
+                        name="size"
+                        value={size.value}
+                        checked={selectedSize === size.value}
+                        onChange={(e) => setSelectedSize(e.target.value)}
+                        className="sr-only"
+                      />
+                      <span>{size.value}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
 
-              {/* Make Type */}
-              <div className="space-y-2">
-                <Label htmlFor="makeType">Make Type *</Label>
-                <Select value={selectedMakeType} onValueChange={setSelectedMakeType}>
-                  <SelectTrigger id="makeType">
-                    <SelectValue placeholder="Select make type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {makeTypes.map((mt) => (
-                      <SelectItem key={mt.id} value={mt.id}>
-                        {mt.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Type of tile manufacturing process
-                </p>
+              {/* MAKE TYPE - Radio Buttons */}
+              <div className="space-y-3">
+                <Label className="text-lg font-semibold text-slate">
+                  MAKE TYPE
+                </Label>
+                <div className="grid grid-cols-3 gap-3">
+                  {makeTypes.map((mt) => (
+                    <label
+                      key={mt.id}
+                      className={`
+                        flex items-center justify-center p-3 border-2 rounded-lg cursor-pointer transition-all text-center
+                        ${selectedMakeType === mt.id 
+                          ? 'border-orange bg-orange-50 text-orange font-semibold' 
+                          : 'border-gray-300 hover:border-orange-light hover:bg-gray-50'
+                        }
+                      `}
+                    >
+                      <input
+                        type="radio"
+                        name="makeType"
+                        value={mt.id}
+                        checked={selectedMakeType === mt.id}
+                        onChange={(e) => setSelectedMakeType(e.target.value)}
+                        className="sr-only"
+                      />
+                      <span className="text-sm">{mt.name}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
 
-              {/* Preview */}
+              {/* Preview Box */}
               {previewName && (
-                <div className="p-4 bg-grey-100 rounded-lg border-2 border-orange-light">
-                  <Label className="text-xs text-muted-foreground">Category Preview:</Label>
-                  <p className="text-xl font-display font-bold text-slate mt-1">
+                <div className="p-6 bg-gradient-to-r from-orange-50 to-orange-100 rounded-lg border-2 border-orange">
+                  <Label className="text-sm text-slate-light uppercase tracking-wide">Preview:</Label>
+                  <p className="text-2xl font-display font-bold text-slate mt-2">
                     {previewName}
-                  </p>
-                  <p className="text-sm text-slate-light mt-1">
-                    This name will be used for the sub-category
                   </p>
                 </div>
               )}
 
               {/* Buttons */}
-              <div className="flex items-center space-x-3 pt-4">
-                <Button
-                  type="submit"
-                  disabled={!selectedSize || !selectedMakeType || loading}
-                  className="bg-orange hover:bg-orange-dark"
-                >
-                  {loading ? t('common:loading') : 'Create Category'}
-                </Button>
+              <div className="flex items-center justify-center space-x-4 pt-4">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => navigate('/dealer/inventory')}
+                  onClick={handleReset}
                   disabled={loading}
+                  className="px-8 py-6 text-orange border-2 border-orange hover:bg-orange-50"
                 >
-                  {t('common:cancel')}
+                  Reset
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={!selectedSize || !selectedMakeType || loading}
+                  className="px-12 py-6 bg-orange hover:bg-orange-dark text-white text-lg"
+                >
+                  {loading ? t('common:loading') : 'ADD'}
                 </Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
-
-        {/* Info Card */}
-        <Card className="mt-6 border-blue-200 bg-blue-50">
-          <CardContent className="pt-6">
-            <h4 className="font-semibold text-slate mb-2">Smart Category Management</h4>
-            <ul className="text-sm text-slate-light space-y-1">
-              <li>• If the category already exists, you'll be able to add products to it</li>
-              <li>• All dealers share the same categories for better marketplace integration</li>
-              <li>• Category names are auto-generated for consistency</li>
-            </ul>
           </CardContent>
         </Card>
       </div>
