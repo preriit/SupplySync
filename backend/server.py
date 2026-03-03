@@ -351,6 +351,76 @@ async def get_products_in_subcategory(
         "products": product_list
     }
 
+@api_router.post("/dealer/products")
+async def create_product(
+    request: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new product"""
+    if current_user.user_type != "dealer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only dealers can access this endpoint"
+        )
+    
+    # Validate required fields
+    required_fields = ['sub_category_id', 'brand', 'name', 'surface_type_id', 
+                       'application_type_id', 'body_type_id', 'quality_id',
+                       'current_quantity', 'packing_per_box']
+    
+    for field in required_fields:
+        if field not in request or request[field] is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Field '{field}' is required"
+            )
+    
+    # Check for duplicate product name within same sub-category for this merchant
+    existing = db.query(Product).filter(
+        Product.merchant_id == current_user.merchant_id,
+        Product.sub_category_id == request['sub_category_id'],
+        Product.brand == request['brand'],
+        Product.name == request['name']
+    ).first()
+    
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Product '{request['brand']} {request['name']}' already exists in this category"
+        )
+    
+    # Create product
+    new_product = Product(
+        merchant_id=current_user.merchant_id,
+        sub_category_id=request['sub_category_id'],
+        brand=request['brand'],
+        name=request['name'],
+        sku=request.get('sku'),
+        surface_type_id=request['surface_type_id'],
+        application_type_id=request['application_type_id'],
+        body_type_id=request['body_type_id'],
+        quality_id=request['quality_id'],
+        current_quantity=request['current_quantity'],
+        packing_per_box=request['packing_per_box'],
+        primary_image_url=request.get('primary_image_url'),
+        is_active=True
+    )
+    
+    db.add(new_product)
+    db.commit()
+    db.refresh(new_product)
+    
+    return {
+        "message": f"Product '{request['brand']} {request['name']}' created successfully",
+        "product": {
+            "id": str(new_product.id),
+            "brand": new_product.brand,
+            "name": new_product.name,
+            "quantity": new_product.current_quantity
+        }
+    }
+
 @api_router.post("/dealer/subcategories")
 async def create_subcategory(
     request: dict,
