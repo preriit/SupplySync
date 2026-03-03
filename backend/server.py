@@ -286,6 +286,71 @@ async def get_subcategories(
     
     return {"subcategories": result}
 
+@api_router.get("/dealer/subcategories/{subcategory_id}/products")
+async def get_products_in_subcategory(
+    subcategory_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all products in a sub-category for this merchant"""
+    if current_user.user_type != "dealer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only dealers can access this endpoint"
+        )
+    
+    # Get sub-category info
+    subcat = db.query(SubCategory).filter(SubCategory.id == subcategory_id).first()
+    if not subcat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sub-category not found"
+        )
+    
+    # Get make type
+    make_type = db.query(MakeType).filter(MakeType.id == subcat.make_type_id).first()
+    
+    # Get products for this merchant in this sub-category
+    products = db.query(Product).filter(
+        Product.sub_category_id == subcategory_id,
+        Product.merchant_id == current_user.merchant_id,
+        Product.is_active == True
+    ).all()
+    
+    product_list = []
+    for product in products:
+        # Get reference data names
+        surface_type = db.query(SurfaceType).filter(SurfaceType.id == product.surface_type_id).first()
+        application_type = db.query(ApplicationType).filter(ApplicationType.id == product.application_type_id).first()
+        body_type = db.query(BodyType).filter(BodyType.id == product.body_type_id).first()
+        quality = db.query(Quality).filter(Quality.id == product.quality_id).first()
+        
+        product_list.append({
+            "id": str(product.id),
+            "brand": product.brand,
+            "name": product.name,
+            "sku": product.sku,
+            "surface_type": surface_type.name if surface_type else "",
+            "application_type": application_type.name if application_type else "",
+            "body_type": body_type.name if body_type else "",
+            "quality": quality.name if quality else "",
+            "current_quantity": product.current_quantity,
+            "packing_per_box": product.packing_per_box,
+            "primary_image_url": product.primary_image_url
+        })
+    
+    return {
+        "subcategory": {
+            "id": str(subcat.id),
+            "name": subcat.name,
+            "size": subcat.size,
+            "size_display": f"{subcat.height_inches}\" x {subcat.width_inches}\"",
+            "size_mm": f"{subcat.height_mm}mm x {subcat.width_mm}mm",
+            "make_type": make_type.name if make_type else ""
+        },
+        "products": product_list
+    }
+
 @api_router.post("/dealer/subcategories")
 async def create_subcategory(
     request: dict,

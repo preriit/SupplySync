@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage';
 import DealerDashboard from './pages/DealerDashboard';
 import SubCategoriesList from './pages/SubCategoriesList';
 import AddSubCategory from './pages/AddSubCategory';
+import ProductsList from './pages/ProductsList';
 import './App.css';
 
 // Protected Route component
@@ -53,6 +54,15 @@ function App() {
           element={
             <ProtectedRoute requiredType="dealer">
               <AddSubCategory />
+            </ProtectedRoute>
+          } 
+        />
+        
+        <Route 
+          path="/dealer/inventory/:subcategoryId/products" 
+          element={
+            <ProtectedRoute requiredType="dealer">
+              <ProductsList />
             </ProtectedRoute>
           } 
         />
