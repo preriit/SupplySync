@@ -286,7 +286,129 @@ async def get_subcategories(
     
     return {"subcategories": result}
 
+@api_router.post("/dealer/subcategories")
+async def create_subcategory(
+    request: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create or get existing sub-category (smart checking)"""
+    if current_user.user_type != "dealer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only dealers can access this endpoint"
+        )
+    
+    size = request.get('size')
+    make_type_id = request.get('make_type_id')
+    
+    if not size or not make_type_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Size and make_type_id are required"
+        )
+    
+    # Get tiles category
+    tiles_category = db.query(Category).filter(Category.slug == "tiles").first()
+    if not tiles_category:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tiles category not found"
+        )
+    
+    # Get make type
+    make_type = db.query(MakeType).filter(MakeType.id == make_type_id).first()
+    if not make_type:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Make type not found"
+        )
+    
+    # Parse size (e.g., "12x12" -> height=12, width=12)
+    try:
+        parts = size.lower().replace('"', '').replace(' ', '').split('x')
+        height_inches = int(parts[0])
+        width_inches = int(parts[1])
+        height_mm = int(height_inches * 25.4)
+        width_mm = int(width_inches * 25.4)
+    except:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid size format. Use format like '12x12'"
+        )
+    
+    # Check if sub-category already exists
+    existing = db.query(SubCategory).filter(
+        SubCategory.category_id == tiles_category.id,
+        SubCategory.size == size,
+        SubCategory.make_type_id == make_type_id
+    ).first()
+    
+    if existing:
+        return {
+            "exists": True,
+            "message": f"Sub-category '{existing.name}' already exists",
+            "subcategory": {
+                "id": str(existing.id),
+                "name": existing.name,
+                "size": existing.size,
+                "make_type": make_type.name
+            }
+        }
+    
+    # Create new sub-category
+    name = f"{size.upper()} {make_type.name.upper()}"
+    
+    new_subcat = SubCategory(
+        category_id=tiles_category.id,
+        name=name,
+        size=size,
+        height_inches=height_inches,
+        width_inches=width_inches,
+        height_mm=height_mm,
+        width_mm=width_mm,
+        make_type_id=make_type_id,
+        default_packing_per_box=10
+    )
+    
+    db.add(new_subcat)
+    db.commit()
+    db.refresh(new_subcat)
+    
+    return {
+        "exists": False,
+        "message": f"Sub-category '{name}' created successfully",
+        "subcategory": {
+            "id": str(new_subcat.id),
+            "name": new_subcat.name,
+            "size": new_subcat.size,
+            "make_type": make_type.name
+        }
+    }
+
 # Reference Data Routes
+@api_router.get("/reference/tile-sizes")
+async def get_tile_sizes():
+    """Get common tile sizes"""
+    sizes = [
+        {"value": "8x12", "label": "8x12 (200x300mm)"},
+        {"value": "10x10", "label": "10x10 (250x250mm)"},
+        {"value": "10x15", "label": "10x15 (250x375mm)"},
+        {"value": "10x20", "label": "10x20 (250x500mm)"},
+        {"value": "10x24", "label": "10x24 (250x600mm)"},
+        {"value": "12x12", "label": "12x12 (300x300mm)"},
+        {"value": "12x18", "label": "12x18 (300x450mm)"},
+        {"value": "12x24", "label": "12x24 (300x600mm)"},
+        {"value": "16x16", "label": "16x16 (400x400mm)"},
+        {"value": "16x24", "label": "16x24 (400x600mm)"},
+        {"value": "18x18", "label": "18x18 (450x450mm)"},
+        {"value": "20x20", "label": "20x20 (500x500mm)"},
+        {"value": "24x24", "label": "24x24 (600x600mm)"},
+        {"value": "24x48", "label": "24x48 (600x1200mm)"},
+        {"value": "32x32", "label": "32x32 (800x800mm)"}
+    ]
+    return {"sizes": sizes}
+
 @api_router.get("/reference/make-types")
 async def get_make_types(db: Session = Depends(get_db)):
     """Get all make types"""

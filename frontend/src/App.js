@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import LoginPage from './pages/LoginPage';
 import DealerDashboard from './pages/DealerDashboard';
 import SubCategoriesList from './pages/SubCategoriesList';
+import AddSubCategory from './pages/AddSubCategory';
 import './App.css';
 
 // Protected Route component
@@ -43,6 +44,15 @@ function App() {
           element={
             <ProtectedRoute requiredType="dealer">
               <SubCategoriesList />
+            </ProtectedRoute>
+          } 
+        />
+        
+        <Route 
+          path="/dealer/inventory/add-category" 
+          element={
+            <ProtectedRoute requiredType="dealer">
+              <AddSubCategory />
             </ProtectedRoute>
           } 
         />
