@@ -10,9 +10,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from database import get_db
-from models import User, Merchant, Product
+from models import (
+    User, Merchant, Product, SubCategory, MakeType, 
+    SurfaceType, ApplicationType, BodyType, Quality, Category
+)
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
 from sqlalchemy import func
+from typing import List
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -221,6 +225,121 @@ async def get_dashboard_stats(
         "out_of_stock_items": out_of_stock or 0,
         "inventory_value": float(inventory_value),
         "recent_activity": []
+    }
+
+# Sub-Categories Routes
+@api_router.get("/dealer/subcategories")
+async def get_subcategories(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all sub-categories with product counts"""
+    if current_user.user_type != "dealer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only dealers can access this endpoint"
+        )
+    
+    # Get tiles category
+    tiles_category = db.query(Category).filter(Category.slug == "tiles").first()
+    if not tiles_category:
+        return {"subcategories": []}
+    
+    # Get all sub-categories with stats
+    subcategories = db.query(SubCategory).filter(
+        SubCategory.category_id == tiles_category.id,
+        SubCategory.is_active == True
+    ).all()
+    
+    result = []
+    for subcat in subcategories:
+        # Get make type name
+        make_type = db.query(MakeType).filter(MakeType.id == subcat.make_type_id).first()
+        
+        # Count products in this sub-category (for this merchant)
+        product_count = db.query(func.count(Product.id)).filter(
+            Product.sub_category_id == subcat.id,
+            Product.merchant_id == current_user.merchant_id,
+            Product.is_active == True
+        ).scalar()
+        
+        # Total quantity across all products
+        total_quantity = db.query(func.sum(Product.current_quantity)).filter(
+            Product.sub_category_id == subcat.id,
+            Product.merchant_id == current_user.merchant_id,
+            Product.is_active == True
+        ).scalar() or 0
+        
+        result.append({
+            "id": str(subcat.id),
+            "name": subcat.name,
+            "size": subcat.size,
+            "size_display": f"{subcat.height_inches}\" x {subcat.width_inches}\"",
+            "size_mm": f"{subcat.height_mm}mm x {subcat.width_mm}mm",
+            "make_type": make_type.name if make_type else "",
+            "product_count": product_count or 0,
+            "total_quantity": int(total_quantity)
+        })
+    
+    # Sort by name
+    result.sort(key=lambda x: x['name'])
+    
+    return {"subcategories": result}
+
+# Reference Data Routes
+@api_router.get("/reference/make-types")
+async def get_make_types(db: Session = Depends(get_db)):
+    """Get all make types"""
+    make_types = db.query(MakeType).filter(MakeType.is_active == True).order_by(MakeType.display_order).all()
+    return {
+        "make_types": [
+            {"id": str(mt.id), "name": mt.name}
+            for mt in make_types
+        ]
+    }
+
+@api_router.get("/reference/surface-types")
+async def get_surface_types(db: Session = Depends(get_db)):
+    """Get all surface types"""
+    surface_types = db.query(SurfaceType).filter(SurfaceType.is_active == True).order_by(SurfaceType.display_order).all()
+    return {
+        "surface_types": [
+            {"id": str(st.id), "name": st.name}
+            for st in surface_types
+        ]
+    }
+
+@api_router.get("/reference/application-types")
+async def get_application_types(db: Session = Depends(get_db)):
+    """Get all application types"""
+    app_types = db.query(ApplicationType).filter(ApplicationType.is_active == True).order_by(ApplicationType.display_order).all()
+    return {
+        "application_types": [
+            {"id": str(at.id), "name": at.name}
+            for at in app_types
+        ]
+    }
+
+@api_router.get("/reference/body-types")
+async def get_body_types(db: Session = Depends(get_db)):
+    """Get all body types"""
+    body_types = db.query(BodyType).filter(BodyType.is_active == True).order_by(BodyType.display_order).all()
+    return {
+        "body_types": [
+            {"id": str(bt.id), "name": bt.name}
+            for bt in body_types
+        ]
+    }
+
+@api_router.get("/reference/qualities")
+async def get_qualities(db: Session = Depends(get_db)):
+    """Get all qualities"""
+    qualities = db.query(Quality).filter(Quality.is_active == True).order_by(Quality.display_order).all()
+    return {
+        "qualities": [
+            {"id": str(q.id), "name": q.name}
+            for q in qualities
+        ]
     }
 
 # Health check
