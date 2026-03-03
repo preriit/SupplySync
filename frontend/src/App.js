@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import DealerDashboard from './pages/DealerDashboard';
+import SubCategoriesList from './pages/SubCategoriesList';
 import './App.css';
 
 // Protected Route component
@@ -33,6 +34,15 @@ function App() {
           element={
             <ProtectedRoute requiredType="dealer">
               <DealerDashboard />
+            </ProtectedRoute>
+          } 
+        />
+        
+        <Route 
+          path="/dealer/inventory" 
+          element={
+            <ProtectedRoute requiredType="dealer">
+              <SubCategoriesList />
             </ProtectedRoute>
           } 
         />

@@ -1,0 +1,21 @@
+{
+  "title": "Tile Categories",
+  "subtitle": "Manage your product categories",
+  "search_placeholder": "Search categories...",
+  "add_category": "Add Category",
+  "view_products": "View Products",
+  "add_products": "Add Products",
+  "products_count": "{{count}} Products",
+  "boxes_in_stock": "{{count}} Boxes in Stock",
+  "no_products_yet": "No products in this category yet",
+  "empty_state": {
+    "title": "No categories yet",
+    "description": "Start by adding your first tile category",
+    "button": "Add Your First Category"
+  },
+  "showing": "Showing",
+  "of": "of",
+  "categories": "categories",
+  "previous": "Previous",
+  "next": "Next"
+}

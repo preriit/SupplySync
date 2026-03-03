@@ -26,7 +26,7 @@ i18n
     },
     
     defaultNS: 'common',
-    ns: ['common', 'auth'],
+    ns: ['common', 'auth', 'dashboard', 'inventory'],
   });
 
 export default i18n;
