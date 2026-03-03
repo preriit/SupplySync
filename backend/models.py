@@ -1,0 +1,94 @@
+from sqlalchemy import Column, String, Boolean, Integer, DECIMAL, Text, DateTime, ForeignKey, JSON
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.sql import func
+from database import Base
+import uuid
+
+class Merchant(Base):
+    __tablename__ = "merchants"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    email = Column(String(255))
+    phone = Column(String(20))
+    address = Column(Text)
+    city = Column(String(100))
+    state = Column(String(100))
+    country = Column(String(100), default='India')
+    postal_code = Column(String(20))
+    gst_number = Column(String(20))
+    pan = Column(String(20))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    extra_data = Column('metadata', JSON)
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    username = Column(String(100), unique=True, nullable=False)
+    email = Column(String(255), unique=True, nullable=False)
+    phone = Column(String(20), unique=True)
+    password_hash = Column(String(255), nullable=False)
+    user_type = Column(String(20), nullable=False)  # 'dealer' or 'subdealer'
+    merchant_id = Column(UUID(as_uuid=True), ForeignKey('merchants.id'))
+    role = Column(String(20))  # For dealers: 'admin', 'manager', 'viewer'
+    business_name = Column(String(255))  # For subdealers
+    business_address = Column(Text)  # For subdealers
+    gst_number = Column(String(20))  # For subdealers
+    preferred_language = Column(String(5), default='en')
+    is_verified = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_login = Column(DateTime(timezone=True))
+    extra_data = Column('metadata', JSON)
+
+class Category(Base):
+    __tablename__ = "categories"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    merchant_id = Column(UUID(as_uuid=True), ForeignKey('merchants.id'))
+    name = Column(String(255), nullable=False)
+    height_inches = Column(Integer)
+    width_inches = Column(Integer)
+    height_mm = Column(Integer)
+    width_mm = Column(Integer)
+    make_type = Column(String(100))
+    application_type = Column(String(100))
+    body_type = Column(String(100))
+    quality = Column(String(100))
+    default_packing_per_box = Column(Integer)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class Product(Base):
+    __tablename__ = "products"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    merchant_id = Column(UUID(as_uuid=True), ForeignKey('merchants.id'), nullable=False)
+    category_id = Column(UUID(as_uuid=True), ForeignKey('categories.id'))
+    name = Column(String(255), nullable=False)
+    brand = Column(String(100))
+    sku = Column(String(100))
+    height_inches = Column(Integer)
+    width_inches = Column(Integer)
+    height_mm = Column(Integer)
+    width_mm = Column(Integer)
+    surface_type = Column(String(50))
+    packing_per_box = Column(Integer)
+    current_quantity = Column(Integer, default=0)
+    current_price = Column(DECIMAL(10, 2))
+    primary_image_url = Column(Text)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    extra_data = Column('metadata', JSON)
+
+class ProductImage(Base):
+    __tablename__ = "product_images"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    product_id = Column(UUID(as_uuid=True), ForeignKey('products.id', ondelete='CASCADE'))
+    image_url = Column(Text, nullable=False)
+    is_primary = Column(Boolean, default=False)
+    ordering = Column(Integer, default=0)
+    uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
