@@ -1,8 +1,63 @@
 from sqlalchemy import Column, String, Boolean, Integer, DECIMAL, Text, DateTime, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from database import Base
 import uuid
+
+# =====================================================
+# REFERENCE TABLES
+# =====================================================
+
+class BodyType(Base):
+    __tablename__ = "body_types"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), unique=True, nullable=False)
+    display_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class MakeType(Base):
+    __tablename__ = "make_types"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), unique=True, nullable=False)
+    body_type_id = Column(UUID(as_uuid=True), ForeignKey('body_types.id'))
+    display_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class SurfaceType(Base):
+    __tablename__ = "surface_types"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), unique=True, nullable=False)
+    display_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class ApplicationType(Base):
+    __tablename__ = "application_types"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), unique=True, nullable=False)
+    display_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class Quality(Base):
+    __tablename__ = "qualities"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), unique=True, nullable=False)
+    display_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+# =====================================================
+# MAIN TABLES
+# =====================================================
 
 class Merchant(Base):
     __tablename__ = "merchants"
@@ -47,41 +102,66 @@ class Category(Base):
     __tablename__ = "categories"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    merchant_id = Column(UUID(as_uuid=True), ForeignKey('merchants.id'))
-    name = Column(String(255), nullable=False)
-    height_inches = Column(Integer)
-    width_inches = Column(Integer)
-    height_mm = Column(Integer)
-    width_mm = Column(Integer)
-    make_type = Column(String(100))
-    application_type = Column(String(100))
-    body_type = Column(String(100))
-    quality = Column(String(100))
-    default_packing_per_box = Column(Integer)
+    name = Column(String(100), unique=True, nullable=False)
+    slug = Column(String(100), unique=True, nullable=False)
+    description = Column(Text)
+    display_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class SubCategory(Base):
+    __tablename__ = "sub_categories"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    category_id = Column(UUID(as_uuid=True), ForeignKey('categories.id'), nullable=False)
+    name = Column(String(255), nullable=False)  # "12x12 GVT"
+    
+    # Size information
+    size = Column(String(50), nullable=False)  # "12x12"
+    height_inches = Column(Integer, nullable=False)
+    width_inches = Column(Integer, nullable=False)
+    height_mm = Column(Integer, nullable=False)
+    width_mm = Column(Integer, nullable=False)
+    
+    # Make type
+    make_type_id = Column(UUID(as_uuid=True), ForeignKey('make_types.id'), nullable=False)
+    
+    # Defaults
+    default_packing_per_box = Column(Integer, default=10)
+    
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 class Product(Base):
     __tablename__ = "products"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     merchant_id = Column(UUID(as_uuid=True), ForeignKey('merchants.id'), nullable=False)
-    category_id = Column(UUID(as_uuid=True), ForeignKey('categories.id'))
+    sub_category_id = Column(UUID(as_uuid=True), ForeignKey('sub_categories.id'), nullable=False)
+    
+    # Product identification
+    brand = Column(String(100), nullable=False)
     name = Column(String(255), nullable=False)
-    brand = Column(String(100))
     sku = Column(String(100))
-    height_inches = Column(Integer)
-    width_inches = Column(Integer)
-    height_mm = Column(Integer)
-    width_mm = Column(Integer)
-    surface_type = Column(String(50))
-    packing_per_box = Column(Integer)
+    
+    # Tile attributes
+    surface_type_id = Column(UUID(as_uuid=True), ForeignKey('surface_types.id'), nullable=False)
+    application_type_id = Column(UUID(as_uuid=True), ForeignKey('application_types.id'), nullable=False)
+    body_type_id = Column(UUID(as_uuid=True), ForeignKey('body_types.id'), nullable=False)
+    quality_id = Column(UUID(as_uuid=True), ForeignKey('qualities.id'), nullable=False)
+    
+    # Stock information (NO PRICE)
     current_quantity = Column(Integer, default=0)
-    current_price = Column(DECIMAL(10, 2))
+    packing_per_box = Column(Integer, default=10)
+    
+    # Images
     primary_image_url = Column(Text)
+    
+    # Status
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    extra_data = Column('metadata', JSON)
 
 class ProductImage(Base):
     __tablename__ = "product_images"
