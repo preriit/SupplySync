@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from database import get_db
 from models import (
     User, Merchant, Product, SubCategory, MakeType, 
-    SurfaceType, ApplicationType, BodyType, Quality, Category
+    SurfaceType, ApplicationType, BodyType, Quality, Category, Size
 )
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
 from sqlalchemy import func
@@ -388,26 +388,22 @@ async def create_subcategory(
 
 # Reference Data Routes
 @api_router.get("/reference/tile-sizes")
-async def get_tile_sizes():
-    """Get common tile sizes"""
-    sizes = [
-        {"value": "8x12", "label": "8x12 (200x300mm)"},
-        {"value": "10x10", "label": "10x10 (250x250mm)"},
-        {"value": "10x15", "label": "10x15 (250x375mm)"},
-        {"value": "10x20", "label": "10x20 (250x500mm)"},
-        {"value": "10x24", "label": "10x24 (250x600mm)"},
-        {"value": "12x12", "label": "12x12 (300x300mm)"},
-        {"value": "12x18", "label": "12x18 (300x450mm)"},
-        {"value": "12x24", "label": "12x24 (300x600mm)"},
-        {"value": "16x16", "label": "16x16 (400x400mm)"},
-        {"value": "16x24", "label": "16x24 (400x600mm)"},
-        {"value": "18x18", "label": "18x18 (450x450mm)"},
-        {"value": "20x20", "label": "20x20 (500x500mm)"},
-        {"value": "24x24", "label": "24x24 (600x600mm)"},
-        {"value": "24x48", "label": "24x48 (600x1200mm)"},
-        {"value": "32x32", "label": "32x32 (800x800mm)"}
-    ]
-    return {"sizes": sizes}
+async def get_tile_sizes(db: Session = Depends(get_db)):
+    """Get tile sizes from database (admin-managed)"""
+    sizes = db.query(Size).filter(Size.is_active == True).order_by(Size.display_order).all()
+    return {
+        "sizes": [
+            {
+                "value": size.name,
+                "label": f"{size.name} ({size.height_mm}x{size.width_mm}mm)",
+                "height_inches": size.height_inches,
+                "width_inches": size.width_inches,
+                "height_mm": size.height_mm,
+                "width_mm": size.width_mm
+            }
+            for size in sizes
+        ]
+    }
 
 @api_router.get("/reference/make-types")
 async def get_make_types(db: Session = Depends(get_db)):

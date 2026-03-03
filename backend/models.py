@@ -55,6 +55,19 @@ class Quality(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+class Size(Base):
+    __tablename__ = "sizes"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(50), unique=True, nullable=False)
+    height_inches = Column(Integer, nullable=False)
+    width_inches = Column(Integer, nullable=False)
+    height_mm = Column(Integer, nullable=False)
+    width_mm = Column(Integer, nullable=False)
+    display_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
 # =====================================================
 # MAIN TABLES
 # =====================================================
