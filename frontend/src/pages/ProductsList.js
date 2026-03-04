@@ -87,11 +87,22 @@ const ProductsList = () => {
   const handleTransaction = async (product, type) => {
     const qty = parseInt(transactionQuantity);
     
-    // Validate integer
-    if (!qty || isNaN(qty) || qty <= 0 || !Number.isInteger(qty)) {
+    // Validate integer - reject decimals
+    if (!transactionQuantity || transactionQuantity.trim() === '') {
       toast({
         title: 'Invalid Quantity',
-        description: 'Please enter a valid positive whole number',
+        description: 'Please enter a quantity',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    // Check if it's a valid integer (reject decimals like 5.5)
+    if (parseFloat(transactionQuantity) !== parseInt(transactionQuantity) || 
+        isNaN(qty) || qty <= 0 || !Number.isInteger(qty)) {
+      toast({
+        title: 'Invalid Quantity',
+        description: 'Please enter a valid positive whole number (no decimals)',
         variant: 'destructive',
       });
       return;
