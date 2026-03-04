@@ -86,7 +86,7 @@ const ProductDetail = () => {
   
   const fetchImages = async () => {
     try {
-      const response = await api.get(`/api/dealer/products/${productId}/images`);
+      const response = await api.get(`/dealer/products/${productId}/images`);
       setImages(response.data);
     } catch (error) {
       console.error('Error fetching images:', error);
@@ -95,7 +95,7 @@ const ProductDetail = () => {
 
   const fetchProduct = async () => {
     try {
-      const response = await api.get(`/api/dealer/products/${productId}`);
+      const response = await api.get(`/dealer/products/${productId}`);
       setProduct(response.data.product);
       setFormData(response.data.product);
     } catch (error) {
@@ -150,7 +150,7 @@ const ProductDetail = () => {
         packing_per_box: formData.packing_per_box,
       };
       
-      await api.put(`/api/dealer/products/${productId}`, updateData);
+      await api.put(`/dealer/products/${productId}`, updateData);
       
       toast({
         title: 'Success',
@@ -173,7 +173,7 @@ const ProductDetail = () => {
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      await api.delete(`/api/dealer/products/${productId}`);
+      await api.delete(`/dealer/products/${productId}`);
       
       toast({
         title: 'Success',
@@ -200,8 +200,8 @@ const ProductDetail = () => {
     try {
       // Fetch both transactions and activity log
       const [transactionsRes, activityRes] = await Promise.all([
-        api.get(`/api/dealer/products/${productId}/transactions`),
-        api.get(`/api/dealer/products/${productId}/activity-log`)
+        api.get(`/dealer/products/${productId}/transactions`),
+        api.get(`/dealer/products/${productId}/activity-log`)
       ]);
       
       setTransactionHistory(transactionsRes.data.transactions);

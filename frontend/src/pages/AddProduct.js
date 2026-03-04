@@ -43,7 +43,7 @@ const AddProduct = () => {
   const fetchData = async () => {
     try {
       const [subcatRes, surfaceRes, appRes, bodyRes, qualityRes] = await Promise.all([
-        api.get(`/api/dealer/subcategories/${subcategoryId}/products`),
+        api.get(`/dealer/subcategories/${subcategoryId}/products`),
         api.get('/reference/surface-types'),
         api.get('/reference/application-types'),
         api.get('/reference/body-types'),

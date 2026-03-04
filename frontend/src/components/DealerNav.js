@@ -55,7 +55,7 @@ const DealerNav = () => {
   const performSearch = async () => {
     setSearching(true);
     try {
-      const response = await api.get(`/api/dealer/search?q=${encodeURIComponent(searchQuery)}`);
+      const response = await api.get(`/dealer/search?q=${encodeURIComponent(searchQuery)}`);
       setSearchResults(response.data);
       setShowResults(true);
     } catch (error) {

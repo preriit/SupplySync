@@ -56,7 +56,7 @@ const ProductsList = () => {
 
   const fetchProducts = async () => {
     try {
-      const response = await api.get(`/api/dealer/subcategories/${subcategoryId}/products`);
+      const response = await api.get(`/dealer/subcategories/${subcategoryId}/products`);
       setSubcategory(response.data.subcategory);
       setProducts(response.data.products);
     } catch (error) {
@@ -124,7 +124,7 @@ const ProductsList = () => {
   const executeTransaction = async (product, type, qty) => {
     setTransacting(true);
     try {
-      const response = await api.post(`/api/dealer/products/${product.id}/transactions`, {
+      const response = await api.post(`/dealer/products/${product.id}/transactions`, {
         transaction_type: type,
         quantity: qty
       });
@@ -173,7 +173,7 @@ const ProductsList = () => {
     setHistoryProduct(product);
     setLoadingHistory(true);
     try {
-      const response = await api.get(`/api/dealer/products/${product.id}/transactions`);
+      const response = await api.get(`/dealer/products/${product.id}/transactions`);
       setTransactionHistory(response.data.transactions);
     } catch (error) {
       toast({
