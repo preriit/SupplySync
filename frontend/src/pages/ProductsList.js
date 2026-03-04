@@ -42,6 +42,7 @@ const ProductsList = () => {
   // Transaction state
   const [transactionProduct, setTransactionProduct] = useState(null);
   const [transactionQuantity, setTransactionQuantity] = useState('');
+  const [transactionError, setTransactionError] = useState('');
   const [showNegativeConfirm, setShowNegativeConfirm] = useState(false);
   const [pendingTransaction, setPendingTransaction] = useState(null);
   const [transacting, setTransacting] = useState(false);
@@ -85,26 +86,38 @@ const ProductsList = () => {
   };
 
   const handleTransaction = async (product, type) => {
+    // Clear previous error
+    setTransactionError('');
+    
     const qty = parseInt(transactionQuantity);
     
     // Validate integer - reject decimals
     if (!transactionQuantity || transactionQuantity.trim() === '') {
-      toast({
-        title: 'Invalid Quantity',
-        description: 'Please enter a quantity',
-        variant: 'destructive',
-      });
+      setTransactionError('Please enter a quantity');
       return;
     }
     
     // Check if it's a valid integer (reject decimals like 5.5)
-    if (parseFloat(transactionQuantity) !== parseInt(transactionQuantity) || 
-        isNaN(qty) || qty <= 0 || !Number.isInteger(qty)) {
-      toast({
-        title: 'Invalid Quantity',
-        description: 'Please enter a valid positive whole number (no decimals)',
-        variant: 'destructive',
-      });
+    const floatValue = parseFloat(transactionQuantity);
+    const intValue = parseInt(transactionQuantity);
+    
+    if (isNaN(floatValue)) {
+      setTransactionError('Please enter a valid number');
+      return;
+    }
+    
+    if (floatValue !== intValue) {
+      setTransactionError('Decimals not allowed. Please enter a whole number');
+      return;
+    }
+    
+    if (qty <= 0) {
+      setTransactionError('Quantity must be greater than 0');
+      return;
+    }
+    
+    if (!Number.isInteger(qty)) {
+      setTransactionError('Please enter a valid whole number');
       return;
     }
     
@@ -148,6 +161,7 @@ const ProductsList = () => {
       // Close dialog and reset
       setTransactionProduct(null);
       setTransactionQuantity('');
+      setTransactionError('');
       setShowNegativeConfirm(false);
       setPendingTransaction(null);
     } catch (error) {
@@ -397,6 +411,7 @@ const ProductsList = () => {
       <Dialog open={transactionProduct !== null} onOpenChange={() => {
         setTransactionProduct(null);
         setTransactionQuantity('');
+        setTransactionError('');
       }}>
         <DialogContent>
           <DialogHeader>
@@ -421,16 +436,26 @@ const ProductsList = () => {
                 step="1"
                 placeholder="Enter whole number"
                 value={transactionQuantity}
-                onChange={(e) => setTransactionQuantity(e.target.value)}
+                onChange={(e) => {
+                  setTransactionQuantity(e.target.value);
+                  setTransactionError(''); // Clear error on input change
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && transactionProduct) {
                     handleTransaction(transactionProduct, transactionProduct.type);
                   }
                 }}
+                className={transactionError ? 'border-red-500' : ''}
               />
-              <p className="text-xs text-slate-light mt-1">
-                Must be a positive whole number (integer)
-              </p>
+              {transactionError ? (
+                <p className="text-sm text-red-600 mt-2 font-medium">
+                  {transactionError}
+                </p>
+              ) : (
+                <p className="text-xs text-slate-light mt-1">
+                  Must be a positive whole number (integer)
+                </p>
+              )}
             </div>
           </div>
           
@@ -440,6 +465,7 @@ const ProductsList = () => {
               onClick={() => {
                 setTransactionProduct(null);
                 setTransactionQuantity('');
+                setTransactionError('');
               }}
             >
               Cancel
