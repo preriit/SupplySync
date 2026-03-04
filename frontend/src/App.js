@@ -13,6 +13,8 @@ import ProductDetail from './pages/ProductDetail';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
+import AdminMerchants from './pages/AdminMerchants';
+import AdminReferenceData from './pages/AdminReferenceData';
 
 import './App.css';
 
@@ -67,6 +69,22 @@ function App() {
           element={
             <AdminProtectedRoute>
               <AdminUsers />
+            </AdminProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin/merchants" 
+          element={
+            <AdminProtectedRoute>
+              <AdminMerchants />
+            </AdminProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin/reference-data" 
+          element={
+            <AdminProtectedRoute>
+              <AdminReferenceData />
             </AdminProtectedRoute>
           } 
         />

@@ -352,6 +352,12 @@ async def update_merchant_status(
 # Reference Data Management Routes
 # =====================================================
 
+from models import MakeType, ApplicationType, SurfaceType, BodyType, Quality, Size
+
+class ReferenceDataItem(BaseModel):
+    name: str
+    display_order: Optional[int] = 0
+
 @admin_router.get("/reference-data/summary")
 async def get_reference_data_summary(
     current_admin: User = Depends(get_current_admin),
@@ -362,5 +368,121 @@ async def get_reference_data_summary(
     return {
         "categories": db.query(Category).count(),
         "sub_categories": db.query(SubCategory).count(),
+        "body_types": db.query(BodyType).count(),
+        "make_types": db.query(MakeType).count(),
+        "surface_types": db.query(SurfaceType).count(),
+        "application_types": db.query(ApplicationType).count(),
+        "quality_types": db.query(Quality).count(),
+        "sizes": db.query(Size).count(),
         "products": db.query(Product).count()
     }
+
+@admin_router.get("/reference-data/{data_type}")
+async def get_reference_data_list(
+    data_type: str,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Get list of reference data items by type"""
+    
+    type_map = {
+        "body_types": BodyType,
+        "make_types": MakeType,
+        "surface_types": SurfaceType,
+        "application_types": ApplicationType,
+        "quality_types": Quality,
+        "sizes": Size,
+        "categories": Category
+    }
+    
+    if data_type not in type_map:
+        raise HTTPException(status_code=400, detail="Invalid data type")
+    
+    model = type_map[data_type]
+    items = db.query(model).filter(model.is_active == True).order_by(model.display_order).all()
+    
+    return [
+        {
+            "id": str(item.id),
+            "name": item.name,
+            "display_order": item.display_order,
+            "is_active": item.is_active,
+            "created_at": item.created_at
+        }
+        for item in items
+    ]
+
+@admin_router.post("/reference-data/{data_type}")
+async def create_reference_data_item(
+    data_type: str,
+    item: ReferenceDataItem,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Create a new reference data item"""
+    
+    type_map = {
+        "body_types": BodyType,
+        "make_types": MakeType,
+        "surface_types": SurfaceType,
+        "application_types": ApplicationType,
+        "quality_types": Quality,
+        "sizes": Size
+    }
+    
+    if data_type not in type_map:
+        raise HTTPException(status_code=400, detail="Invalid data type")
+    
+    model = type_map[data_type]
+    
+    # Check for duplicate
+    existing = db.query(model).filter(model.name == item.name).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"{item.name} already exists")
+    
+    new_item = model(
+        name=item.name,
+        display_order=item.display_order,
+        is_active=True
+    )
+    
+    db.add(new_item)
+    db.commit()
+    db.refresh(new_item)
+    
+    return {
+        "message": f"{item.name} created successfully",
+        "id": str(new_item.id)
+    }
+
+@admin_router.delete("/reference-data/{data_type}/{item_id}")
+async def delete_reference_data_item(
+    data_type: str,
+    item_id: str,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Soft delete a reference data item"""
+    
+    type_map = {
+        "body_types": BodyType,
+        "make_types": MakeType,
+        "surface_types": SurfaceType,
+        "application_types": ApplicationType,
+        "quality_types": Quality,
+        "sizes": Size
+    }
+    
+    if data_type not in type_map:
+        raise HTTPException(status_code=400, detail="Invalid data type")
+    
+    model = type_map[data_type]
+    item = db.query(model).filter(model.id == item_id).first()
+    
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    item.is_active = False
+    db.commit()
+    
+    return {"message": "Item deactivated successfully"}
