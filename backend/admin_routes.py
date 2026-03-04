@@ -364,17 +364,17 @@ async def get_reference_data_summary(
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    """Get counts of all reference data types"""
+    """Get counts of all reference data types (only active items)"""
     
     return {
-        "categories": db.query(Category).count(),
+        "categories": db.query(Category).filter(Category.is_active == True).count(),
         "sub_categories": db.query(SubCategory).count(),
-        "body_types": db.query(BodyType).count(),
-        "make_types": db.query(MakeType).count(),
-        "surface_types": db.query(SurfaceType).count(),
-        "application_types": db.query(ApplicationType).count(),
-        "quality_types": db.query(Quality).count(),
-        "sizes": db.query(Size).count(),
+        "body_types": db.query(BodyType).filter(BodyType.is_active == True).count(),
+        "make_types": db.query(MakeType).filter(MakeType.is_active == True).count(),
+        "surface_types": db.query(SurfaceType).filter(SurfaceType.is_active == True).count(),
+        "application_types": db.query(ApplicationType).filter(ApplicationType.is_active == True).count(),
+        "quality_types": db.query(Quality).filter(Quality.is_active == True).count(),
+        "sizes": db.query(Size).filter(Size.is_active == True).count(),
         "products": db.query(Product).count()
     }
 
