@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
+import SignUpPage from './pages/SignUpPage';
 import DealerDashboard from './pages/DealerDashboard';
 import SubCategoriesList from './pages/SubCategoriesList';
 import AddSubCategory from './pages/AddSubCategory';
@@ -31,6 +32,8 @@ function App() {
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignUpPage />} />
+
         
         {/* Dealer Routes */}
         <Route 

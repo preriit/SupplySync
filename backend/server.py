@@ -50,6 +50,18 @@ class RegisterDealerRequest(BaseModel):
     state: Optional[str] = None
     gst_number: Optional[str] = None
 
+class SignUpRequest(BaseModel):
+    business_name: str
+    owner_name: str
+    phone: str
+    city: str
+    state: str
+    postal_code: str
+    address: Optional[str] = None
+    email: EmailStr
+    password: str
+
+
 class UserResponse(BaseModel):
     id: str
     username: str
@@ -92,9 +104,77 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
             "email": user.email,
             "user_type": user.user_type,
             "merchant_id": str(user.merchant_id) if user.merchant_id else None,
-            "preferred_language": user.preferred_language
+            "preferred_language": user.preferred_language or "en"
         }
     }
+
+@api_router.post("/auth/signup")
+async def signup(request: SignUpRequest, db: Session = Depends(get_db)):
+    """Sign up endpoint for new dealers"""
+    
+    # Check if email already exists
+    existing_user = db.query(User).filter(User.email == request.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # Check if phone already exists
+    existing_phone = db.query(User).filter(User.phone == request.phone).first()
+    if existing_phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Phone number already registered"
+        )
+    
+    try:
+        # Create merchant
+        merchant = Merchant(
+            id=uuid.uuid4(),
+            name=request.business_name,
+            email=request.email,
+            phone=request.phone,
+            city=request.city,
+            state=request.state,
+            country="India",
+            postal_code=request.postal_code,
+            address=request.address
+        )
+        db.add(merchant)
+        db.flush()
+        
+        # Create user
+        user = User(
+            id=uuid.uuid4(),
+            username=request.owner_name,
+            email=request.email,
+            phone=request.phone,
+            password_hash=get_password_hash(request.password),
+            user_type="dealer",
+            merchant_id=merchant.id,
+            is_active=True
+        )
+        db.add(user)
+        db.commit()
+        
+        return {
+            "message": "Account created successfully",
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "username": user.username,
+                "merchant_id": str(merchant.id)
+            }
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Signup error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create account"
+        )
 
 @api_router.post("/auth/register/dealer")
 async def register_dealer(request: RegisterDealerRequest, db: Session = Depends(get_db)):
