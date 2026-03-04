@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
   ArrowLeft, Edit, Trash2, Save, X, Package, Grid3x3, 
-  Box, Calendar, History
+  Box, Calendar, History, Plus, FileEdit, ArrowUp, ArrowDown, RefreshCw
 } from 'lucide-react';
 import {
   Select,
@@ -16,6 +16,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,6 +69,10 @@ const ProductDetail = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [transactionHistory, setTransactionHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  
+  // Activity log
+  const [activityLog, setActivityLog] = useState([]);
+  const [loadingActivity, setLoadingActivity] = useState(false);
 
   useEffect(() => {
     fetchProduct();
@@ -171,17 +181,60 @@ const ProductDetail = () => {
   const viewTransactionHistory = async () => {
     setShowHistory(true);
     setLoadingHistory(true);
+    setLoadingActivity(true);
+    
     try {
-      const response = await api.get(`/api/dealer/products/${productId}/transactions`);
-      setTransactionHistory(response.data.transactions);
+      // Fetch both transactions and activity log
+      const [transactionsRes, activityRes] = await Promise.all([
+        api.get(`/api/dealer/products/${productId}/transactions`),
+        api.get(`/api/dealer/products/${productId}/activity-log`)
+      ]);
+      
+      setTransactionHistory(transactionsRes.data.transactions);
+      setActivityLog(activityRes.data.activities);
     } catch (error) {
       toast({
         title: 'Failed to Load History',
-        description: error.response?.data?.detail || 'Could not load transaction history',
+        description: error.response?.data?.detail || 'Could not load history',
         variant: 'destructive',
       });
     } finally {
       setLoadingHistory(false);
+      setLoadingActivity(false);
+    }
+  };
+
+  const getActivityIcon = (activityType) => {
+    switch (activityType) {
+      case 'created':
+        return <Plus className="h-4 w-4" />;
+      case 'edited':
+        return <FileEdit className="h-4 w-4" />;
+      case 'quantity_add':
+        return <ArrowUp className="h-4 w-4" />;
+      case 'quantity_subtract':
+        return <ArrowDown className="h-4 w-4" />;
+      case 'deleted':
+        return <Trash2 className="h-4 w-4" />;
+      default:
+        return <RefreshCw className="h-4 w-4" />;
+    }
+  };
+
+  const getActivityColor = (activityType) => {
+    switch (activityType) {
+      case 'created':
+        return 'bg-blue-500';
+      case 'edited':
+        return 'bg-orange-500';
+      case 'quantity_add':
+        return 'bg-green-500';
+      case 'quantity_subtract':
+        return 'bg-red-500';
+      case 'deleted':
+        return 'bg-gray-500';
+      default:
+        return 'bg-gray-400';
     }
   };
 
@@ -550,67 +603,156 @@ const ProductDetail = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Transaction History Dialog */}
+      {/* Transaction History & Activity Log Dialog with Tabs */}
       <Dialog open={showHistory} onOpenChange={setShowHistory}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>Transaction History</DialogTitle>
+            <DialogTitle>Product History & Activity</DialogTitle>
             <DialogDescription>
               {product.brand} - {product.name}
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-2">
-            {loadingHistory ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange mx-auto"></div>
-                <p className="mt-2 text-sm text-slate-light">Loading history...</p>
-              </div>
-            ) : transactionHistory.length === 0 ? (
-              <div className="text-center py-8 text-slate-light">
-                <Package className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                <p>No transaction history yet</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {transactionHistory.map((txn) => (
-                  <Card key={txn.id} className="border">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2">
-                            <Badge 
-                              variant={txn.transaction_type === 'add' ? 'default' : 'destructive'}
-                              className={txn.transaction_type === 'add' ? 'bg-green-500' : 'bg-red-500'}
-                            >
-                              {txn.transaction_type === 'add' ? '+' : '-'} {txn.quantity}
-                            </Badge>
-                            <span className="text-sm text-slate-light">
-                              {new Date(txn.created_at).toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="mt-2 text-sm">
-                            <span className="text-slate-light">Quantity: </span>
-                            <span className="font-medium">
-                              {txn.quantity_before} → {txn.quantity_after} boxes
-                            </span>
-                          </div>
-                          <div className="text-xs text-slate-light mt-1">
-                            By: {txn.created_by}
-                          </div>
-                          {txn.notes && (
-                            <div className="text-xs text-slate-light mt-1 italic">
-                              Note: {txn.notes}
+          <Tabs defaultValue="transactions" className="flex-1 overflow-hidden flex flex-col">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="transactions">
+                <History className="mr-2 h-4 w-4" />
+                Transactions ({transactionHistory.length})
+              </TabsTrigger>
+              <TabsTrigger value="activity">
+                <FileEdit className="mr-2 h-4 w-4" />
+                Activity Log ({activityLog.length})
+              </TabsTrigger>
+            </TabsList>
+            
+            {/* Transactions Tab */}
+            <TabsContent value="transactions" className="flex-1 overflow-y-auto mt-4">
+              {loadingHistory ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange mx-auto"></div>
+                  <p className="mt-2 text-sm text-slate-light">Loading transactions...</p>
+                </div>
+              ) : transactionHistory.length === 0 ? (
+                <div className="text-center py-8 text-slate-light">
+                  <Package className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                  <p>No transaction history yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2 pr-2">
+                  {transactionHistory.map((txn) => (
+                    <Card key={txn.id} className="border">
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              <Badge 
+                                variant={txn.transaction_type === 'add' ? 'default' : 'destructive'}
+                                className={txn.transaction_type === 'add' ? 'bg-green-500' : 'bg-red-500'}
+                              >
+                                {txn.transaction_type === 'add' ? '+' : '-'} {txn.quantity}
+                              </Badge>
+                              <span className="text-sm text-slate-light">
+                                {new Date(txn.created_at).toLocaleString()}
+                              </span>
                             </div>
-                          )}
+                            <div className="mt-2 text-sm">
+                              <span className="text-slate-light">Quantity: </span>
+                              <span className="font-medium">
+                                {txn.quantity_before} → {txn.quantity_after} boxes
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-light mt-1">
+                              By: {txn.created_by}
+                            </div>
+                            {txn.notes && (
+                              <div className="text-xs text-slate-light mt-1 italic">
+                                Note: {txn.notes}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+            
+            {/* Activity Log Tab */}
+            <TabsContent value="activity" className="flex-1 overflow-y-auto mt-4">
+              {loadingActivity ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange mx-auto"></div>
+                  <p className="mt-2 text-sm text-slate-light">Loading activity log...</p>
+                </div>
+              ) : activityLog.length === 0 ? (
+                <div className="text-center py-8 text-slate-light">
+                  <FileEdit className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                  <p>No activity recorded yet</p>
+                  <p className="text-xs mt-2">Activities will appear here when actions are performed</p>
+                </div>
+              ) : (
+                <div className="space-y-3 pr-2">
+                  {activityLog.map((activity) => (
+                    <Card key={activity.id} className="border">
+                      <CardContent className="p-4">
+                        <div className="flex items-start space-x-3">
+                          {/* Activity Icon */}
+                          <div className={`p-2 rounded-full ${getActivityColor(activity.activity_type)} text-white flex-shrink-0`}>
+                            {getActivityIcon(activity.activity_type)}
+                          </div>
+                          
+                          {/* Activity Details */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <h4 className="font-medium text-slate capitalize">
+                                {activity.activity_type.replace('_', ' ')}
+                              </h4>
+                              <span className="text-xs text-slate-light">
+                                {new Date(activity.created_at).toLocaleString()}
+                              </span>
+                            </div>
+                            
+                            <p className="text-sm text-slate-light mt-1">
+                              {activity.description}
+                            </p>
+                            
+                            {/* Show detailed changes for edits */}
+                            {activity.activity_type === 'edited' && activity.changes?.fields_changed && (
+                              <div className="mt-2 space-y-1 bg-orange-50 p-2 rounded text-xs">
+                                <p className="font-medium text-orange-700">Changes made:</p>
+                                {activity.changes.fields_changed.map((change, idx) => (
+                                  <div key={idx} className="text-slate">
+                                    <span className="font-medium capitalize">{change.field.replace('_', ' ')}:</span>{' '}
+                                    <span className="line-through text-slate-light">{change.old_value}</span>
+                                    {' → '}
+                                    <span className="font-medium">{change.new_value}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            
+                            {/* Show quantity change details */}
+                            {(activity.activity_type === 'quantity_add' || activity.activity_type === 'quantity_subtract') && activity.changes && (
+                              <div className="mt-1 text-xs">
+                                <Badge variant="outline" className="text-xs">
+                                  {activity.changes.from} → {activity.changes.to} boxes
+                                </Badge>
+                              </div>
+                            )}
+                            
+                            <div className="text-xs text-slate-light mt-1">
+                              By: {activity.created_by}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
     </div>
