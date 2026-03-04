@@ -32,6 +32,18 @@ const AdminReferenceData = () => {
   const [newItemName, setNewItemName] = useState('');
   const [selectedBodyType, setSelectedBodyType] = useState('');
   const [bodyTypes, setBodyTypes] = useState([]);
+  const [applicationTypes, setApplicationTypes] = useState([]);
+  
+  // Size-specific state
+  const [sizeForm, setSizeForm] = useState({
+    widthInches: '',
+    widthMm: '',
+    heightInches: '',
+    heightMm: '',
+    packagingPerBox: '',
+    applicationTypeId: '',
+    bodyTypeId: ''
+  });
 
   const dataTypes = [
     { key: 'body_types', label: 'Body Types', icon: Package, color: 'bg-blue-500' },
@@ -45,6 +57,7 @@ const AdminReferenceData = () => {
   useEffect(() => {
     fetchSummary();
     fetchBodyTypes();
+    fetchApplicationTypes();
   }, []);
 
   useEffect(() => {
@@ -80,10 +93,26 @@ const AdminReferenceData = () => {
     }
   };
 
+  const fetchApplicationTypes = async () => {
+    try {
+      const token = localStorage.getItem('admin_token');
+      const response = await api.get('/admin/reference-data/application_types', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setApplicationTypes(response.data);
+    } catch (error) {
+      console.error('Failed to fetch application types:', error);
+    }
+  };
+
   const fetchItems = async (dataType) => {
     try {
       const token = localStorage.getItem('admin_token');
-      const response = await api.get(`/admin/reference-data/${dataType}`, {
+      const endpoint = dataType === 'sizes' 
+        ? '/admin/reference-data/sizes/detailed'
+        : `/admin/reference-data/${dataType}`;
+      
+      const response = await api.get(endpoint, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setItems(response.data);
@@ -94,12 +123,17 @@ const AdminReferenceData = () => {
   };
 
   const createItem = async () => {
+    // Handle sizes separately
+    if (selectedType === 'sizes') {
+      return createSize();
+    }
+    
+    // Regular handling for other types
     if (!newItemName.trim()) {
       toast.error('Please enter a name');
       return;
     }
 
-    // For make_types, body type is required
     if (selectedType === 'make_types' && !selectedBodyType) {
       toast.error('Please select a body type');
       return;
@@ -107,21 +141,15 @@ const AdminReferenceData = () => {
 
     try {
       const token = localStorage.getItem('admin_token');
-      const payload = { 
-        name: newItemName, 
-        display_order: 0 
-      };
+      const payload = { name: newItemName, display_order: 0 };
       
-      // Add body_type_id for make_types
       if (selectedType === 'make_types') {
         payload.body_type_id = selectedBodyType;
       }
       
-      await api.post(
-        `/admin/reference-data/${selectedType}`,
-        payload,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await api.post(`/admin/reference-data/${selectedType}`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       
       toast.success('Item created successfully');
       setNewItemName('');
@@ -131,6 +159,41 @@ const AdminReferenceData = () => {
       fetchSummary();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create item');
+    }
+  };
+
+  const createSize = async () => {
+    if (!sizeForm.widthInches || !sizeForm.widthMm || !sizeForm.heightInches || 
+        !sizeForm.heightMm || !sizeForm.packagingPerBox || 
+        !sizeForm.applicationTypeId || !sizeForm.bodyTypeId) {
+      toast.error('All fields are required');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('admin_token');
+      await api.post('/admin/reference-data/sizes/create', {
+        width_inches: parseInt(sizeForm.widthInches),
+        width_mm: parseInt(sizeForm.widthMm),
+        height_inches: parseInt(sizeForm.heightInches),
+        height_mm: parseInt(sizeForm.heightMm),
+        default_packaging_per_box: parseInt(sizeForm.packagingPerBox),
+        application_type_id: sizeForm.applicationTypeId,
+        body_type_id: sizeForm.bodyTypeId
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      toast.success('Size created successfully');
+      setSizeForm({
+        widthInches: '', widthMm: '', heightInches: '', heightMm: '',
+        packagingPerBox: '', applicationTypeId: '', bodyTypeId: ''
+      });
+      setIsDialogOpen(false);
+      fetchItems('sizes');
+      fetchSummary();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to create size');
     }
   };
 
@@ -220,15 +283,90 @@ const AdminReferenceData = () => {
                           Add New
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="bg-slate-800 border-slate-700">
+                      <DialogContent className="bg-slate-800 border-slate-700 max-w-2xl">
                         <DialogHeader>
                           <DialogTitle className="text-white">
                             Add New {dataTypes.find(t => t.key === selectedType)?.label.slice(0, -1)}
                           </DialogTitle>
                           <DialogDescription className="text-slate-400">
-                            Enter the name for the new item
+                            {selectedType === 'sizes' ? 'Enter all size parameters (all fields required)' : 'Enter the name for the new item'}
                           </DialogDescription>
                         </DialogHeader>
+                        
+                        {selectedType === 'sizes' ? (
+                          <div className="space-y-4 py-4 max-h-96 overflow-y-auto">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label className="text-slate-200">Width (Inches) *</Label>
+                                <Input type="number" placeholder="24" value={sizeForm.widthInches}
+                                  onChange={(e) => setSizeForm({...sizeForm, widthInches: e.target.value})}
+                                  className="bg-slate-900 border-slate-600 text-white" />
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-slate-200">Width (MM) *</Label>
+                                <Input type="number" placeholder="600" value={sizeForm.widthMm}
+                                  onChange={(e) => setSizeForm({...sizeForm, widthMm: e.target.value})}
+                                  className="bg-slate-900 border-slate-600 text-white" />
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label className="text-slate-200">Height (Inches) *</Label>
+                                <Input type="number" placeholder="48" value={sizeForm.heightInches}
+                                  onChange={(e) => setSizeForm({...sizeForm, heightInches: e.target.value})}
+                                  className="bg-slate-900 border-slate-600 text-white" />
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-slate-200">Height (MM) *</Label>
+                                <Input type="number" placeholder="1200" value={sizeForm.heightMm}
+                                  onChange={(e) => setSizeForm({...sizeForm, heightMm: e.target.value})}
+                                  className="bg-slate-900 border-slate-600 text-white" />
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label className="text-slate-200">Default Packaging Per Box *</Label>
+                              <Input type="number" placeholder="4" value={sizeForm.packagingPerBox}
+                                onChange={(e) => setSizeForm({...sizeForm, packagingPerBox: e.target.value})}
+                                className="bg-slate-900 border-slate-600 text-white" />
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label className="text-slate-200">Application Type *</Label>
+                              <Select value={sizeForm.applicationTypeId}
+                                onValueChange={(value) => setSizeForm({...sizeForm, applicationTypeId: value})}>
+                                <SelectTrigger className="bg-slate-900 border-slate-600 text-white">
+                                  <SelectValue placeholder="Select application type..." />
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-800 border-slate-700">
+                                  {applicationTypes.map((type) => (
+                                    <SelectItem key={type.id} value={type.id} className="text-white">{type.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label className="text-slate-200">Body Type *</Label>
+                              <Select value={sizeForm.bodyTypeId}
+                                onValueChange={(value) => setSizeForm({...sizeForm, bodyTypeId: value})}>
+                                <SelectTrigger className="bg-slate-900 border-slate-600 text-white">
+                                  <SelectValue placeholder="Select body type..." />
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-800 border-slate-700">
+                                  {bodyTypes.map((type) => (
+                                    <SelectItem key={type.id} value={type.id} className="text-white">{type.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            
+                            <Button onClick={createItem} className="w-full bg-orange hover:bg-orange-dark">
+                              Create Size
+                            </Button>
+                          </div>
+                        ) : (
                         <div className="space-y-4 py-4">
                           <div className="space-y-2">
                             <Label htmlFor="name" className="text-slate-200">
@@ -278,6 +416,7 @@ const AdminReferenceData = () => {
                             Create
                           </Button>
                         </div>
+                        )}
                       </DialogContent>
                     </Dialog>
                   </div>
