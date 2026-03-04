@@ -23,7 +23,10 @@ const SubCategoriesList = () => {
   useEffect(() => {
     if (searchQuery) {
       const filtered = subcategories.filter(subcat =>
-        subcat.name.toLowerCase().includes(searchQuery.toLowerCase())
+        subcat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        subcat.size.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        subcat.make_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        subcat.size_mm.toLowerCase().includes(searchQuery.toLowerCase())
       );
       setFilteredSubcategories(filtered);
     } else {
@@ -83,7 +86,7 @@ const SubCategoriesList = () => {
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
             <Input
               type="text"
-              placeholder={t('inventory:search_placeholder')}
+              placeholder="Search categories by name, size, or type..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-12 py-6"

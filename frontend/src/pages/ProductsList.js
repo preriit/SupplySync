@@ -60,7 +60,10 @@ const ProductsList = () => {
     if (searchQuery) {
       const filtered = products.filter(product =>
         product.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.name.toLowerCase().includes(searchQuery.toLowerCase())
+        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        product.surface_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        product.quality.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (product.sku && product.sku.toLowerCase().includes(searchQuery.toLowerCase()))
       );
       setFilteredProducts(filtered);
     } else {
@@ -273,7 +276,7 @@ const ProductsList = () => {
                 <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <Input
                   type="text"
-                  placeholder="Search by brand or name..."
+                  placeholder="Search by brand, name, surface type, quality, or SKU..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-12 py-6"
