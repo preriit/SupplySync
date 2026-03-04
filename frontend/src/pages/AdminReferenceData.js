@@ -32,18 +32,6 @@ const AdminReferenceData = () => {
   const [newItemName, setNewItemName] = useState('');
   const [selectedBodyType, setSelectedBodyType] = useState('');
   const [bodyTypes, setBodyTypes] = useState([]);
-  const [applicationTypes, setApplicationTypes] = useState([]);
-  
-  // Size-specific fields
-  const [sizeData, setSizeData] = useState({
-    width_inches: '',
-    width_mm: '',
-    height_inches: '',
-    height_mm: '',
-    default_packaging_per_box: '',
-    application_type_id: '',
-    body_type_id: ''
-  });
 
   const dataTypes = [
     { key: 'body_types', label: 'Body Types', icon: Package, color: 'bg-blue-500' },
@@ -57,7 +45,6 @@ const AdminReferenceData = () => {
   useEffect(() => {
     fetchSummary();
     fetchBodyTypes();
-    fetchApplicationTypes();
   }, []);
 
   useEffect(() => {
@@ -93,28 +80,10 @@ const AdminReferenceData = () => {
     }
   };
 
-  const fetchApplicationTypes = async () => {
-    try {
-      const token = localStorage.getItem('admin_token');
-      const response = await api.get('/admin/reference-data/application_types', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setApplicationTypes(response.data);
-    } catch (error) {
-      console.error('Failed to fetch application types:', error);
-    }
-  };
-
   const fetchItems = async (dataType) => {
     try {
       const token = localStorage.getItem('admin_token');
-      
-      // Use special endpoint for sizes to get full details
-      const endpoint = dataType === 'sizes' 
-        ? '/admin/reference-data/sizes/detailed'
-        : `/admin/reference-data/${dataType}`;
-      
-      const response = await api.get(endpoint, {
+      const response = await api.get(`/admin/reference-data/${dataType}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setItems(response.data);
@@ -125,12 +94,6 @@ const AdminReferenceData = () => {
   };
 
   const createItem = async () => {
-    // For sizes, use special handling
-    if (selectedType === 'sizes') {
-      return createSize();
-    }
-    
-    // For other types, use regular handling
     if (!newItemName.trim()) {
       toast.error('Please enter a name');
       return;
@@ -168,50 +131,6 @@ const AdminReferenceData = () => {
       fetchSummary();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create item');
-    }
-  };
-
-  const createSize = async () => {
-    // Validate all size fields
-    if (!sizeData.width_inches || !sizeData.width_mm || 
-        !sizeData.height_inches || !sizeData.height_mm ||
-        !sizeData.default_packaging_per_box ||
-        !sizeData.application_type_id || !sizeData.body_type_id) {
-      toast.error('All fields are required');
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('admin_token');
-      await api.post(
-        '/admin/reference-data/sizes/create',
-        {
-          width_inches: parseInt(sizeData.width_inches),
-          width_mm: parseInt(sizeData.width_mm),
-          height_inches: parseInt(sizeData.height_inches),
-          height_mm: parseInt(sizeData.height_mm),
-          default_packaging_per_box: parseInt(sizeData.default_packaging_per_box),
-          application_type_id: sizeData.application_type_id,
-          body_type_id: sizeData.body_type_id
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      
-      toast.success('Size created successfully');
-      setSizeData({
-        width_inches: '',
-        width_mm: '',
-        height_inches: '',
-        height_mm: '',
-        default_packaging_per_box: '',
-        application_type_id: '',
-        body_type_id: ''
-      });
-      setIsDialogOpen(false);
-      fetchItems('sizes');
-      fetchSummary();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to create size');
     }
   };
 
@@ -304,119 +223,37 @@ const AdminReferenceData = () => {
                       <DialogContent className="bg-slate-800 border-slate-700">
                         <DialogHeader>
                           <DialogTitle className="text-white">
-                            Add New {dataTypes.find(t => t.key === selectedType)?.label.slice(0, -1) || selectedType}
+                            Add New {dataTypes.find(t => t.key === selectedType)?.label.slice(0, -1)}
                           </DialogTitle>
                           <DialogDescription className="text-slate-400">
-                            {selectedType === 'sizes' 
-                              ? 'Enter all size parameters (all fields required)'
-                              : 'Enter the details for the new item'}
+                            Enter the name for the new item
                           </DialogDescription>
                         </DialogHeader>
-                        
-                        {/* SIZE-SPECIFIC FORM */}
-                        {selectedType === 'sizes' ? (
-                          <div className="space-y-4 py-4 max-h-96 overflow-y-auto">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <Label className="text-slate-200">
-                                  Width (Inches) <span className="text-red-500">*</span>
-                                </Label>
-                                <Input
-                                  type="number"
-                                  placeholder="24"
-                                  value={sizeData.width_inches}
-                                  onChange={(e) => setSizeData({...sizeData, width_inches: e.target.value})}
-                                  className="bg-slate-900 border-slate-600 text-white"
-                                  required
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label className="text-slate-200">
-                                  Width (MM) <span className="text-red-500">*</span>
-                                </Label>
-                                <Input
-                                  type="number"
-                                  placeholder="600"
-                                  value={sizeData.width_mm}
-                                  onChange={(e) => setSizeData({...sizeData, width_mm: e.target.value})}
-                                  className="bg-slate-900 border-slate-600 text-white"
-                                  required
-                                />
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <Label className="text-slate-200">
-                                  Height (Inches) <span className="text-red-500">*</span>
-                                </Label>
-                                <Input
-                                  type="number"
-                                  placeholder="48"
-                                  value={sizeData.height_inches}
-                                  onChange={(e) => setSizeData({...sizeData, height_inches: e.target.value})}
-                                  className="bg-slate-900 border-slate-600 text-white"
-                                  required
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label className="text-slate-200">
-                                  Height (MM) <span className="text-red-500">*</span>
-                                </Label>
-                                <Input
-                                  type="number"
-                                  placeholder="1200"
-                                  value={sizeData.height_mm}
-                                  onChange={(e) => setSizeData({...sizeData, height_mm: e.target.value})}
-                                  className="bg-slate-900 border-slate-600 text-white"
-                                  required
-                                />
-                              </div>
-                            </div>
-
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="name" className="text-slate-200">
+                              Name <span className="text-red-500">*</span>
+                            </Label>
+                            <Input
+                              id="name"
+                              placeholder="Enter name..."
+                              value={newItemName}
+                              onChange={(e) => setNewItemName(e.target.value)}
+                              className="bg-slate-900 border-slate-600 text-white"
+                              onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && createItem()}
+                              required
+                            />
+                          </div>
+                          
+                          {/* Show Body Type selector only for Make Types */}
+                          {selectedType === 'make_types' && (
                             <div className="space-y-2">
-                              <Label className="text-slate-200">
-                                Default Packaging Per Box <span className="text-red-500">*</span>
-                              </Label>
-                              <Input
-                                type="number"
-                                placeholder="4"
-                                value={sizeData.default_packaging_per_box}
-                                onChange={(e) => setSizeData({...sizeData, default_packaging_per_box: e.target.value})}
-                                className="bg-slate-900 border-slate-600 text-white"
-                                required
-                              />
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label className="text-slate-200">
-                                Application Type <span className="text-red-500">*</span>
-                              </Label>
-                              <Select
-                                value={sizeData.application_type_id}
-                                onValueChange={(value) => setSizeData({...sizeData, application_type_id: value})}
-                                required
-                              >
-                                <SelectTrigger className="bg-slate-900 border-slate-600 text-white">
-                                  <SelectValue placeholder="Select application type..." />
-                                </SelectTrigger>
-                                <SelectContent className="bg-slate-800 border-slate-700">
-                                  {applicationTypes.map((appType) => (
-                                    <SelectItem key={appType.id} value={appType.id} className="text-white">
-                                      {appType.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label className="text-slate-200">
+                              <Label htmlFor="body_type" className="text-slate-200">
                                 Body Type <span className="text-red-500">*</span>
                               </Label>
                               <Select
-                                value={sizeData.body_type_id}
-                                onValueChange={(value) => setSizeData({...sizeData, body_type_id: value})}
+                                value={selectedBodyType}
+                                onValueChange={setSelectedBodyType}
                                 required
                               >
                                 <SelectTrigger className="bg-slate-900 border-slate-600 text-white">
@@ -424,70 +261,23 @@ const AdminReferenceData = () => {
                                 </SelectTrigger>
                                 <SelectContent className="bg-slate-800 border-slate-700">
                                   {bodyTypes.map((bodyType) => (
-                                    <SelectItem key={bodyType.id} value={bodyType.id} className="text-white">
+                                    <SelectItem 
+                                      key={bodyType.id} 
+                                      value={bodyType.id}
+                                      className="text-white"
+                                    >
                                       {bodyType.name}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
                             </div>
-
-                            <Button onClick={createItem} className="w-full bg-orange hover:bg-orange-dark">
-                              Create Size
-                            </Button>
-                          </div>
-                        ) : (
-                          /* REGULAR FORM FOR OTHER TYPES */
-                          <div className="space-y-4 py-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="name" className="text-slate-200">
-                                Name <span className="text-red-500">*</span>
-                              </Label>
-                              <Input
-                                id="name"
-                                placeholder="Enter name..."
-                                value={newItemName}
-                                onChange={(e) => setNewItemName(e.target.value)}
-                                className="bg-slate-900 border-slate-600 text-white"
-                                onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && createItem()}
-                                required
-                              />
-                            </div>
-                            
-                            {/* Show Body Type selector only for Make Types */}
-                            {selectedType === 'make_types' && (
-                              <div className="space-y-2">
-                                <Label htmlFor="body_type" className="text-slate-200">
-                                  Body Type <span className="text-red-500">*</span>
-                                </Label>
-                                <Select
-                                  value={selectedBodyType}
-                                  onValueChange={setSelectedBodyType}
-                                  required
-                                >
-                                  <SelectTrigger className="bg-slate-900 border-slate-600 text-white">
-                                    <SelectValue placeholder="Select body type..." />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-slate-800 border-slate-700">
-                                    {bodyTypes.map((bodyType) => (
-                                      <SelectItem 
-                                        key={bodyType.id} 
-                                        value={bodyType.id}
-                                        className="text-white"
-                                      >
-                                        {bodyType.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            )}
-                            
-                            <Button onClick={createItem} className="w-full bg-orange hover:bg-orange-dark">
-                              Create
-                            </Button>
-                          </div>
-                        )}
+                          )}
+                          
+                          <Button onClick={createItem} className="w-full bg-orange hover:bg-orange-dark">
+                            Create
+                          </Button>
+                        </div>
                       </DialogContent>
                     </Dialog>
                   </div>
@@ -498,76 +288,32 @@ const AdminReferenceData = () => {
                       <div className="text-center py-8 text-slate-400">
                         No items found. Click "Add New" to create one.
                       </div>
-                    ) : selectedType === 'sizes' ? (
-                        /* SIZES DISPLAY WITH FULL DETAILS */
-                        <div className="grid grid-cols-1 gap-3">
-                          {items.map((item) => (
-                            <div
-                              key={item.id}
-                              className="p-4 bg-slate-700/50 rounded-lg hover:bg-slate-700"
-                            >
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-white font-bold text-lg">{item.name}</span>
-                                    <span className="text-slate-400">({item.name_mm})</span>
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                                    <div className="text-slate-300">
-                                      📏 Dimensions: {item.width_inches}\inch x {item.height_inches}\inch 
-                                      <span className=inchtext-slate-500inch> ({item.width_mm}mm x {item.height_mm}mm)</span>
-                                    </div>
-                                    <div className="text-slate-300">
-                                      📦 Packaging: {item.default_packaging_per_box} pcs/box
-                                    </div>
-                                    <div className="text-slate-300">
-                                      🎯 Application: {item.application_type_name || 'N/A'}
-                                    </div>
-                                    <div className="text-slate-300">
-                                      🏗️ Body Type: {item.body_type_name || 'N/A'}
-                                    </div>
-                                  </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {items.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700"
+                          >
+                            <div className="flex-1">
+                              <span className="text-white font-medium">{item.name}</span>
+                              {selectedType === 'make_types' && item.body_type_name && (
+                                <div className="text-xs text-slate-400 mt-1">
+                                  Body Type: {item.body_type_name}
                                 </div>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => deleteItem(item.id)}
-                                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 ml-2"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
+                              )}
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        /* REGULAR DISPLAY FOR OTHER TYPES */
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                          {items.map((item) => (
-                            <div
-                              key={item.id}
-                              className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700"
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => deleteItem(item.id)}
+                              className="text-red-400 hover:text-red-300 hover:bg-red-500/10 ml-2"
                             >
-                              <div className="flex-1">
-                                <span className="text-white font-medium">{item.name}</span>
-                                {selectedType === 'make_types' && item.body_type_name && (
-                                  <div className="text-xs text-slate-400 mt-1">
-                                    Body Type: {item.body_type_name}
-                                  </div>
-                                )}
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => deleteItem(item.id)}
-                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 ml-2"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      )
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </CardContent>
