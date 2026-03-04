@@ -590,6 +590,28 @@ const ProductDetail = () => {
             </Card>
           </div>
         </div>
+
+        {/* Product Images Section */}
+        <div className="mt-8">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Package className="h-5 w-5 text-orange" />
+                <span>Product Images</span>
+              </CardTitle>
+              <p className="text-sm text-slate-light mt-1">
+                Upload product images with automatic color extraction
+              </p>
+            </CardHeader>
+            <CardContent>
+              <ImageUpload 
+                productId={productId} 
+                images={images}
+                onImagesChange={setImages}
+              />
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Delete Confirmation Dialog */}
