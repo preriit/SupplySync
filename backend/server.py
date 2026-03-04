@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from database import get_db
 from models import (
     User, Merchant, Product, SubCategory, MakeType, 
-    SurfaceType, ApplicationType, BodyType, Quality, Category, Size, ProductTransaction
+    SurfaceType, ApplicationType, BodyType, Quality, Category, Size, ProductTransaction, ProductActivityLog
 )
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
 from sqlalchemy import func
@@ -407,6 +407,17 @@ async def create_product(
     db.commit()
     db.refresh(new_product)
     
+    # Log product creation activity
+    log_product_activity(
+        db=db,
+        product_id=str(new_product.id),
+        merchant_id=str(current_user.merchant_id),
+        user_id=str(current_user.id),
+        activity_type='created',
+        description=f"Product created: {new_product.brand} {new_product.name}"
+    )
+    db.commit()
+    
     return {
         "message": f"Product '{request['brand']} {request['name']}' created successfully",
         "product": {
@@ -500,22 +511,33 @@ async def update_product(
             detail="Product not found"
         )
     
-    # Update fields
-    if 'brand' in request:
+    # Track changes for activity log
+    changes_made = []
+    
+    # Update fields and track changes
+    if 'brand' in request and request['brand'] != product.brand:
+        changes_made.append({"field": "brand", "old_value": product.brand, "new_value": request['brand']})
         product.brand = request['brand']
-    if 'name' in request:
+    if 'name' in request and request['name'] != product.name:
+        changes_made.append({"field": "name", "old_value": product.name, "new_value": request['name']})
         product.name = request['name']
-    if 'sku' in request:
+    if 'sku' in request and request['sku'] != product.sku:
+        changes_made.append({"field": "sku", "old_value": product.sku, "new_value": request['sku']})
         product.sku = request['sku']
-    if 'surface_type_id' in request:
+    if 'surface_type_id' in request and request['surface_type_id'] != str(product.surface_type_id):
+        changes_made.append({"field": "surface_type_id", "old_value": str(product.surface_type_id), "new_value": request['surface_type_id']})
         product.surface_type_id = request['surface_type_id']
-    if 'application_type_id' in request:
+    if 'application_type_id' in request and request['application_type_id'] != str(product.application_type_id):
+        changes_made.append({"field": "application_type_id", "old_value": str(product.application_type_id), "new_value": request['application_type_id']})
         product.application_type_id = request['application_type_id']
-    if 'body_type_id' in request:
+    if 'body_type_id' in request and request['body_type_id'] != str(product.body_type_id):
+        changes_made.append({"field": "body_type_id", "old_value": str(product.body_type_id), "new_value": request['body_type_id']})
         product.body_type_id = request['body_type_id']
-    if 'quality_id' in request:
+    if 'quality_id' in request and request['quality_id'] != str(product.quality_id):
+        changes_made.append({"field": "quality_id", "old_value": str(product.quality_id), "new_value": request['quality_id']})
         product.quality_id = request['quality_id']
-    if 'packing_per_box' in request:
+    if 'packing_per_box' in request and request['packing_per_box'] != product.packing_per_box:
+        changes_made.append({"field": "packing_per_box", "old_value": product.packing_per_box, "new_value": request['packing_per_box']})
         product.packing_per_box = request['packing_per_box']
     
     # Update timestamp
@@ -524,6 +546,19 @@ async def update_product(
     
     db.commit()
     db.refresh(product)
+    
+    # Log activity if changes were made
+    if changes_made:
+        log_product_activity(
+            db=db,
+            product_id=str(product.id),
+            merchant_id=str(current_user.merchant_id),
+            user_id=str(current_user.id),
+            activity_type='edited',
+            changes={"fields_changed": changes_made},
+            description=f"Product edited: {len(changes_made)} field(s) updated"
+        )
+        db.commit()
     
     return {
         "message": "Product updated successfully",
@@ -565,6 +600,17 @@ async def delete_product(
     from datetime import datetime, timezone
     product.updated_at = datetime.now(timezone.utc)
     
+    db.commit()
+    
+    # Log deletion activity
+    log_product_activity(
+        db=db,
+        product_id=str(product.id),
+        merchant_id=str(current_user.merchant_id),
+        user_id=str(current_user.id),
+        activity_type='deleted',
+        description=f"Product deleted: {product.brand} {product.name}"
+    )
     db.commit()
     
     return {
@@ -641,6 +687,18 @@ async def create_product_transaction(
     db.refresh(transaction)
     db.refresh(product)
     
+    # Log activity
+    log_product_activity(
+        db=db,
+        product_id=str(product.id),
+        merchant_id=str(current_user.merchant_id),
+        user_id=str(current_user.id),
+        activity_type='quantity_add' if transaction_type == 'add' else 'quantity_subtract',
+        changes={"quantity_change": quantity if transaction_type == 'add' else -quantity, "from": quantity_before, "to": quantity_after},
+        description=f"{transaction_type.capitalize()} {quantity} boxes: {quantity_before} → {quantity_after}"
+    )
+    db.commit()
+    
     return {
         "message": f"Transaction successful: {transaction_type} {quantity} boxes",
         "transaction": {
@@ -714,6 +772,63 @@ async def get_product_transactions(
         "transactions": transaction_list,
         "total_count": len(transaction_list)
     }
+
+@api_router.get("/dealer/products/{product_id}/activity-log")
+async def get_product_activity_log(
+    product_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    limit: int = 100
+):
+    """Get complete activity log for a product (all changes)"""
+    if current_user.user_type != "dealer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only dealers can access this endpoint"
+        )
+    
+    # Verify product belongs to merchant
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.merchant_id == current_user.merchant_id
+    ).first()
+    
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found"
+        )
+    
+    # Get activity log
+    activities = db.query(ProductActivityLog).filter(
+        ProductActivityLog.product_id == product_id
+    ).order_by(ProductActivityLog.created_at.desc()).limit(limit).all()
+    
+    activity_list = []
+    for activity in activities:
+        # Get user who performed the action
+        user = db.query(User).filter(User.id == activity.user_id).first()
+        
+        activity_list.append({
+            "id": str(activity.id),
+            "activity_type": activity.activity_type,
+            "changes": activity.changes,
+            "description": activity.description,
+            "created_at": activity.created_at.isoformat(),
+            "created_by": user.username if user else "Unknown"
+        })
+    
+    return {
+        "product": {
+            "id": str(product.id),
+            "brand": product.brand,
+            "name": product.name,
+            "current_quantity": product.current_quantity
+        },
+        "activities": activity_list,
+        "total_count": len(activity_list)
+    }
+
 
 @api_router.post("/dealer/subcategories")
 async def create_subcategory(
@@ -999,6 +1114,29 @@ async def health_check():
 
 # Include router
 app.include_router(api_router)
+
+# Helper function to log product activities
+def log_product_activity(
+    db: Session,
+    product_id: str,
+    merchant_id: str,
+    user_id: str,
+    activity_type: str,
+    changes: dict = None,
+    description: str = None
+):
+    """Log product activity for audit trail"""
+    activity = ProductActivityLog(
+        product_id=product_id,
+        merchant_id=merchant_id,
+        user_id=user_id,
+        activity_type=activity_type,
+        changes=changes,
+        description=description
+    )
+    db.add(activity)
+    # Note: Caller should commit after their main operation
+
 
 # CORS middleware
 app.add_middleware(

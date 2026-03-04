@@ -205,3 +205,19 @@ class ProductTransaction(Base):
     
     # Timestamp
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class ProductActivityLog(Base):
+    __tablename__ = "product_activity_log"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    product_id = Column(UUID(as_uuid=True), ForeignKey('products.id', ondelete='CASCADE'), nullable=False)
+    merchant_id = Column(UUID(as_uuid=True), ForeignKey('merchants.id'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    
+    # Activity details
+    activity_type = Column(String(50), nullable=False)  # 'created', 'edited', 'quantity_add', etc.
+    changes = Column(JSON)  # Store changes as JSON
+    description = Column(Text)
+    
+    # Timestamp
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
