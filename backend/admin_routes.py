@@ -451,10 +451,26 @@ async def create_reference_data_item(
     
     model = type_map[data_type]
     
-    # Check for duplicate
+    # Check if item exists (active or inactive)
     existing = db.query(model).filter(model.name == item.name).first()
+    
     if existing:
-        raise HTTPException(status_code=400, detail=f"{item.name} already exists")
+        if existing.is_active:
+            # Already exists and active
+            raise HTTPException(status_code=400, detail=f"{item.name} already exists and is active")
+        else:
+            # Exists but inactive - reactivate it
+            existing.is_active = True
+            if data_type == "make_types" and item.body_type_id:
+                existing.body_type_id = item.body_type_id
+            existing.display_order = item.display_order
+            db.commit()
+            db.refresh(existing)
+            
+            return {
+                "message": f"{item.name} reactivated successfully",
+                "id": str(existing.id)
+            }
     
     # Special handling for make_types - requires body_type_id
     if data_type == "make_types":
