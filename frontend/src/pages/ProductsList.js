@@ -279,7 +279,7 @@ const ProductsList = () => {
               /* Products Grid */
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredProducts.map((product) => (
+                  {products.map((product) => (
                     <Card key={product.id} className="hover:shadow-lg transition-shadow">
                       <CardContent className="p-6">
                         {/* Product Image */}
@@ -359,6 +359,7 @@ const ProductsList = () => {
                               variant="outline"
                               size="icon"
                               className="hover:bg-gray-50"
+                              onClick={() => navigate(`/dealer/inventory/${subcategoryId}/products/${product.id}`)}
                             >
                               <Edit className="h-4 w-4" />
                             </Button>

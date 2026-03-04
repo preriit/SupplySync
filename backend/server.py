@@ -417,6 +417,160 @@ async def create_product(
         }
     }
 
+@api_router.get("/dealer/products/{product_id}")
+async def get_product_detail(
+    product_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get detailed information about a specific product"""
+    if current_user.user_type != "dealer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only dealers can access this endpoint"
+        )
+    
+    # Get product with all related data
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.merchant_id == current_user.merchant_id
+    ).first()
+    
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found"
+        )
+    
+    # Get related entities
+    sub_category = db.query(SubCategory).filter(SubCategory.id == product.sub_category_id).first()
+    surface_type = db.query(SurfaceType).filter(SurfaceType.id == product.surface_type_id).first()
+    application_type = db.query(ApplicationType).filter(ApplicationType.id == product.application_type_id).first()
+    body_type = db.query(BodyType).filter(BodyType.id == product.body_type_id).first()
+    quality = db.query(Quality).filter(Quality.id == product.quality_id).first()
+    
+    return {
+        "product": {
+            "id": str(product.id),
+            "sub_category_id": str(product.sub_category_id),
+            "sub_category_name": sub_category.name if sub_category else "",
+            "brand": product.brand,
+            "name": product.name,
+            "sku": product.sku,
+            "surface_type_id": str(product.surface_type_id),
+            "surface_type": surface_type.name if surface_type else "",
+            "application_type_id": str(product.application_type_id),
+            "application_type": application_type.name if application_type else "",
+            "body_type_id": str(product.body_type_id),
+            "body_type": body_type.name if body_type else "",
+            "quality_id": str(product.quality_id),
+            "quality": quality.name if quality else "",
+            "current_quantity": product.current_quantity,
+            "packing_per_box": product.packing_per_box,
+            "primary_image_url": product.primary_image_url,
+            "is_active": product.is_active,
+            "created_at": product.created_at.isoformat() if product.created_at else None,
+            "updated_at": product.updated_at.isoformat() if product.updated_at else None
+        }
+    }
+
+@api_router.put("/dealer/products/{product_id}")
+async def update_product(
+    product_id: str,
+    request: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update an existing product"""
+    if current_user.user_type != "dealer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only dealers can access this endpoint"
+        )
+    
+    # Get product
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.merchant_id == current_user.merchant_id
+    ).first()
+    
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found"
+        )
+    
+    # Update fields
+    if 'brand' in request:
+        product.brand = request['brand']
+    if 'name' in request:
+        product.name = request['name']
+    if 'sku' in request:
+        product.sku = request['sku']
+    if 'surface_type_id' in request:
+        product.surface_type_id = request['surface_type_id']
+    if 'application_type_id' in request:
+        product.application_type_id = request['application_type_id']
+    if 'body_type_id' in request:
+        product.body_type_id = request['body_type_id']
+    if 'quality_id' in request:
+        product.quality_id = request['quality_id']
+    if 'packing_per_box' in request:
+        product.packing_per_box = request['packing_per_box']
+    
+    # Update timestamp
+    from datetime import datetime, timezone
+    product.updated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(product)
+    
+    return {
+        "message": "Product updated successfully",
+        "product": {
+            "id": str(product.id),
+            "brand": product.brand,
+            "name": product.name,
+            "current_quantity": product.current_quantity
+        }
+    }
+
+@api_router.delete("/dealer/products/{product_id}")
+async def delete_product(
+    product_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a product (soft delete by setting is_active to False)"""
+    if current_user.user_type != "dealer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only dealers can access this endpoint"
+        )
+    
+    # Get product
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.merchant_id == current_user.merchant_id
+    ).first()
+    
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found"
+        )
+    
+    # Soft delete
+    product.is_active = False
+    from datetime import datetime, timezone
+    product.updated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    
+    return {
+        "message": f"Product '{product.brand} {product.name}' deleted successfully"
+    }
+
 # Product Transactions Routes
 @api_router.post("/dealer/products/{product_id}/transactions")
 async def create_product_transaction(
