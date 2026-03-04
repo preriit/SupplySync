@@ -59,11 +59,15 @@ class Size(Base):
     __tablename__ = "sizes"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(50), unique=True, nullable=False)
+    name = Column(String(50), unique=True, nullable=False)  # Will store inches representation
+    name_mm = Column(String(50))  # Will store mm representation
     height_inches = Column(Integer, nullable=False)
     width_inches = Column(Integer, nullable=False)
     height_mm = Column(Integer, nullable=False)
     width_mm = Column(Integer, nullable=False)
+    default_packaging_per_box = Column(Integer, nullable=False)
+    application_type_id = Column(UUID(as_uuid=True), ForeignKey('application_types.id'))
+    body_type_id = Column(UUID(as_uuid=True), ForeignKey('body_types.id'))
     display_order = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

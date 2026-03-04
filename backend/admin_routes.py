@@ -357,7 +357,16 @@ from models import MakeType, ApplicationType, SurfaceType, BodyType, Quality, Si
 class ReferenceDataItem(BaseModel):
     name: str
     display_order: Optional[int] = 0
-    body_type_id: Optional[str] = None  # For make_types only
+    body_type_id: Optional[str] = None  # For make_types and sizes
+    
+class SizeCreateRequest(BaseModel):
+    width_inches: int
+    width_mm: int
+    height_inches: int
+    height_mm: int
+    default_packaging_per_box: int
+    application_type_id: str
+    body_type_id: str
 
 @admin_router.get("/reference-data/summary")
 async def get_reference_data_summary(
@@ -535,3 +544,95 @@ async def delete_reference_data_item(
     db.commit()
     
     return {"message": "Item deactivated successfully"}
+
+# =====================================================
+# Size Management Routes (Special handling)
+# =====================================================
+
+@admin_router.post("/reference-data/sizes/create")
+async def create_size(
+    size_data: SizeCreateRequest,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Create a new size with all parameters"""
+    
+    # Validate application_type exists
+    app_type = db.query(ApplicationType).filter(ApplicationType.id == size_data.application_type_id).first()
+    if not app_type:
+        raise HTTPException(status_code=400, detail="Invalid application_type_id")
+    
+    # Validate body_type exists
+    body_type = db.query(BodyType).filter(BodyType.id == size_data.body_type_id).first()
+    if not body_type:
+        raise HTTPException(status_code=400, detail="Invalid body_type_id")
+    
+    # Generate names
+    name_inches = f"{size_data.width_inches} x {size_data.height_inches}"
+    name_mm = f"{size_data.width_mm} x {size_data.height_mm}"
+    
+    # Check if size with same name already exists
+    existing = db.query(Size).filter(
+        Size.name == name_inches,
+        Size.is_active == True
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Size {name_inches} already exists and is active")
+    
+    # Create new size
+    new_size = Size(
+        name=name_inches,
+        name_mm=name_mm,
+        width_inches=size_data.width_inches,
+        width_mm=size_data.width_mm,
+        height_inches=size_data.height_inches,
+        height_mm=size_data.height_mm,
+        default_packaging_per_box=size_data.default_packaging_per_box,
+        application_type_id=size_data.application_type_id,
+        body_type_id=size_data.body_type_id,
+        is_active=True
+    )
+    
+    db.add(new_size)
+    db.commit()
+    db.refresh(new_size)
+    
+    return {
+        "message": f"Size {name_inches} created successfully",
+        "id": str(new_size.id),
+        "name_inches": name_inches,
+        "name_mm": name_mm
+    }
+
+@admin_router.get("/reference-data/sizes/detailed")
+async def get_sizes_detailed(
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Get all sizes with full details including related data"""
+    
+    sizes = db.query(Size).filter(Size.is_active == True).order_by(Size.display_order).all()
+    
+    result = []
+    for size in sizes:
+        app_type = db.query(ApplicationType).filter(ApplicationType.id == size.application_type_id).first()
+        body_type = db.query(BodyType).filter(BodyType.id == size.body_type_id).first()
+        
+        result.append({
+            "id": str(size.id),
+            "name": size.name,
+            "name_mm": size.name_mm,
+            "width_inches": size.width_inches,
+            "width_mm": size.width_mm,
+            "height_inches": size.height_inches,
+            "height_mm": size.height_mm,
+            "default_packaging_per_box": size.default_packaging_per_box,
+            "application_type_id": str(size.application_type_id) if size.application_type_id else None,
+            "application_type_name": app_type.name if app_type else None,
+            "body_type_id": str(size.body_type_id) if size.body_type_id else None,
+            "body_type_name": body_type.name if body_type else None,
+            "created_at": size.created_at
+        })
+    
+    return result

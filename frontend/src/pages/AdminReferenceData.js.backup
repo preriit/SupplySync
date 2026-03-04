@@ -514,8 +514,8 @@ const AdminReferenceData = () => {
                                   </div>
                                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                                     <div className="text-slate-300">
-                                      📏 Dimensions: {item.width_inches}\inch x {item.height_inches}\inch 
-                                      <span className=inchtext-slate-500inch> ({item.width_mm}mm x {item.height_mm}mm)</span>
+                                      📏 Dimensions: {item.width_inches}\" x {item.height_inches}\" 
+                                      <span className="text-slate-500"> ({item.width_mm}mm x {item.height_mm}mm)</span>
                                     </div>
                                     <div className="text-slate-300">
                                       📦 Packaging: {item.default_packaging_per_box} pcs/box
