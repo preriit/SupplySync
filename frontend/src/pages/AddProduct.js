@@ -44,10 +44,10 @@ const AddProduct = () => {
     try {
       const [subcatRes, surfaceRes, appRes, bodyRes, qualityRes] = await Promise.all([
         api.get(`/api/dealer/subcategories/${subcategoryId}/products`),
-        api.get('/api/reference/surface-types'),
-        api.get('/api/reference/application-types'),
-        api.get('/api/reference/body-types'),
-        api.get('/api/reference/qualities')
+        api.get('/reference/surface-types'),
+        api.get('/reference/application-types'),
+        api.get('/reference/body-types'),
+        api.get('/reference/qualities')
       ]);
       
       setSubcategory(subcatRes.data.subcategory);
@@ -66,7 +66,7 @@ const AddProduct = () => {
     setLoading(true);
 
     try {
-      const response = await api.post('/api/dealer/products', {
+      const response = await api.post('/dealer/products', {
         sub_category_id: subcategoryId,
         ...formData
       });

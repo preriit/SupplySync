@@ -28,7 +28,7 @@ const DealerDashboard = () => {
 
   const fetchDashboardStats = async () => {
     try {
-      const response = await api.get('/api/dealer/dashboard/stats');
+      const response = await api.get('/dealer/dashboard/stats');
       setStats(response.data);
     } catch (error) {
       console.error('Failed to fetch dashboard stats:', error);

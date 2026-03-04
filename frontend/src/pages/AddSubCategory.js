@@ -39,8 +39,8 @@ const AddSubCategory = () => {
   const fetchReferenceData = async () => {
     try {
       const [sizesRes, makeTypesRes] = await Promise.all([
-        api.get('/api/reference/tile-sizes'),
-        api.get('/api/reference/make-types')
+        api.get('/reference/tile-sizes'),
+        api.get('/reference/make-types')
       ]);
       setSizes(sizesRes.data.sizes);
       setMakeTypes(makeTypesRes.data.make_types);
@@ -55,7 +55,7 @@ const AddSubCategory = () => {
     setLoading(true);
 
     try {
-      const response = await api.post('/api/dealer/subcategories', {
+      const response = await api.post('/dealer/subcategories', {
         size: selectedSize,
         make_type_id: selectedMakeType
       });

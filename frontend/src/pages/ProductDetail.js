@@ -113,10 +113,10 @@ const ProductDetail = () => {
   const fetchReferenceData = async () => {
     try {
       const [surfaces, applications, bodies, quals] = await Promise.all([
-        api.get('/api/reference/surface-types'),
-        api.get('/api/reference/application-types'),
-        api.get('/api/reference/body-types'),
-        api.get('/api/reference/qualities'),
+        api.get('/reference/surface-types'),
+        api.get('/reference/application-types'),
+        api.get('/reference/body-types'),
+        api.get('/reference/qualities'),
       ]);
       setSurfaceTypes(surfaces.data.surface_types);
       setApplicationTypes(applications.data.application_types);

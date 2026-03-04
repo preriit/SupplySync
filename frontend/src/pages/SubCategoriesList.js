@@ -20,7 +20,7 @@ const SubCategoriesList = () => {
 
   const fetchSubcategories = async () => {
     try {
-      const response = await api.get('/api/dealer/subcategories');
+      const response = await api.get('/dealer/subcategories');
       setSubcategories(response.data.subcategories);
     } catch (error) {
       console.error('Failed to fetch subcategories:', error);
