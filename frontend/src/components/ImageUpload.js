@@ -1,10 +1,12 @@
 import React, { useState, useCallback } from 'react';
 import { Upload, X, Star, Image as ImageIcon, Loader2 } from 'lucide-react';
 import api from '../utils/api';
+import { useToast } from '@/hooks/use-toast';
 
 const ImageUpload = ({ productId, images = [], onImagesChange }) => {
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const { toast } = useToast();
 
   const handleDrag = useCallback((e) => {
     e.preventDefault();
@@ -62,10 +64,21 @@ const ImageUpload = ({ productId, images = [], onImagesChange }) => {
         onImagesChange(updatedImages.data);
       }
       
-      alert(`Successfully uploaded ${response.data.length} image(s)!`);
+      // Show subtle success toast
+      toast({
+        title: "Images uploaded successfully",
+        description: `${response.data.length} image(s) uploaded with color extraction`,
+        duration: 3000,
+      });
     } catch (error) {
       console.error('Upload error:', error);
-      alert(error.response?.data?.detail || 'Failed to upload images');
+      // Show error toast
+      toast({
+        title: "Upload failed",
+        description: error.response?.data?.detail || 'Failed to upload images. Please try again.',
+        variant: "destructive",
+        duration: 5000,
+      });
     } finally {
       setUploading(false);
     }
@@ -80,9 +93,17 @@ const ImageUpload = ({ productId, images = [], onImagesChange }) => {
         const updatedImages = await api.get(`/dealer/products/${productId}/images`);
         onImagesChange(updatedImages.data);
       }
+      
+      toast({
+        title: "Primary image updated",
+        duration: 2000,
+      });
     } catch (error) {
       console.error('Set primary error:', error);
-      alert('Failed to set primary image');
+      toast({
+        title: "Failed to set primary image",
+        variant: "destructive",
+      });
     }
   };
 
@@ -99,9 +120,17 @@ const ImageUpload = ({ productId, images = [], onImagesChange }) => {
         const updatedImages = await api.get(`/dealer/products/${productId}/images`);
         onImagesChange(updatedImages.data);
       }
+      
+      toast({
+        title: "Image deleted",
+        duration: 2000,
+      });
     } catch (error) {
       console.error('Delete error:', error);
-      alert('Failed to delete image');
+      toast({
+        title: "Failed to delete image",
+        variant: "destructive",
+      });
     }
   };
 
