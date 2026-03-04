@@ -86,14 +86,6 @@ const DealerDashboard = () => {
             icon={ShoppingBag}
             iconColor="text-red-500"
           />
-          
-          <StatCard
-            title="Inventory Value"
-            value={loading ? '...' : formatCurrency(stats.inventory_value)}
-            subtitle={t('dashboard:this_month')}
-            icon={TrendingUp}
-            iconColor="text-green-600"
-          />
         </div>
 
         {/* Main Content Grid */}
@@ -109,7 +101,7 @@ const DealerDashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Button
                   onClick={() => navigate('/dealer/inventory/add')}
                   className="bg-orange hover:bg-orange-dark h-24 flex flex-col items-center justify-center space-y-2"
@@ -125,15 +117,6 @@ const DealerDashboard = () => {
                 >
                   <Eye className="h-8 w-8" />
                   <span className="font-semibold">{t('dashboard:view_inventory')}</span>
-                </Button>
-                
-                <Button
-                  onClick={() => navigate('/dealer/orders')}
-                  variant="outline"
-                  className="h-24 flex flex-col items-center justify-center space-y-2 border-2 hover:border-orange hover:text-orange"
-                >
-                  <FileText className="h-8 w-8" />
-                  <span className="font-semibold">{t('dashboard:view_orders')}</span>
                 </Button>
               </div>
             </CardContent>
