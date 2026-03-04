@@ -211,12 +211,8 @@ async def get_dashboard_stats(
         Product.current_quantity == 0
     ).scalar()
     
-    # Total inventory value (sum of price * quantity)
-    inventory_value = db.query(
-        func.sum(Product.current_price * Product.current_quantity)
-    ).filter(
-        Product.merchant_id == merchant_id
-    ).scalar() or 0
+    # Total inventory value - NOTE: Price not implemented yet
+    inventory_value = 0  # Will be calculated once pricing is added
     
     return {
         "total_products": total_products or 0,

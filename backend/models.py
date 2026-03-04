@@ -185,3 +185,23 @@ class ProductImage(Base):
     is_primary = Column(Boolean, default=False)
     ordering = Column(Integer, default=0)
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class ProductTransaction(Base):
+    __tablename__ = "product_transactions"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    product_id = Column(UUID(as_uuid=True), ForeignKey('products.id', ondelete='CASCADE'), nullable=False)
+    merchant_id = Column(UUID(as_uuid=True), ForeignKey('merchants.id'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    
+    # Transaction details
+    transaction_type = Column(String(20), nullable=False)  # 'add' or 'subtract'
+    quantity = Column(Integer, nullable=False)  # Always positive number
+    quantity_before = Column(Integer, nullable=False)
+    quantity_after = Column(Integer, nullable=False)
+    
+    # Additional context
+    notes = Column(Text)
+    
+    # Timestamp
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
