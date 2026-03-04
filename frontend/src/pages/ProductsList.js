@@ -35,8 +35,6 @@ const ProductsList = () => {
   const { toast } = useToast();
   const [subcategory, setSubcategory] = useState(null);
   const [products, setProducts] = useState([]);
-  const [filteredProducts, setFilteredProducts] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   
   // Transaction state
@@ -56,27 +54,11 @@ const ProductsList = () => {
     fetchProducts();
   }, [subcategoryId]);
 
-  useEffect(() => {
-    if (searchQuery) {
-      const filtered = products.filter(product =>
-        product.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.surface_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.quality.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (product.sku && product.sku.toLowerCase().includes(searchQuery.toLowerCase()))
-      );
-      setFilteredProducts(filtered);
-    } else {
-      setFilteredProducts(products);
-    }
-  }, [searchQuery, products]);
-
   const fetchProducts = async () => {
     try {
       const response = await api.get(`/api/dealer/subcategories/${subcategoryId}/products`);
       setSubcategory(response.data.subcategory);
       setProducts(response.data.products);
-      setFilteredProducts(response.data.products);
     } catch (error) {
       console.error('Failed to fetch products:', error);
     } finally {
@@ -154,7 +136,6 @@ const ProductsList = () => {
           : p
       );
       setProducts(updatedProducts);
-      setFilteredProducts(updatedProducts);
       
       toast({
         title: 'Transaction Successful',
@@ -258,7 +239,7 @@ const ProductsList = () => {
 
             {/* Header */}
             <div className="mb-6">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between">
                 <h1 className="text-3xl font-display font-bold text-slate">
                   Products
                 </h1>
@@ -270,21 +251,9 @@ const ProductsList = () => {
                   Add Product
                 </Button>
               </div>
-
-              {/* Search Bar */}
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <Input
-                  type="text"
-                  placeholder="Search by brand, name, surface type, quality, or SKU..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-12 py-6"
-                />
-              </div>
             </div>
 
-            {filteredProducts.length === 0 ? (
+            {products.length === 0 ? (
               /* Empty State */
               <Card className="border-2 border-dashed border-gray-300">
                 <CardContent className="p-12 text-center">
@@ -402,7 +371,7 @@ const ProductsList = () => {
 
                 {/* Results Count */}
                 <div className="mt-8 text-center text-sm text-slate-light">
-                  Showing {filteredProducts.length} of {products.length} products
+                  Showing {products.length} products
                 </div>
               </>
             )}

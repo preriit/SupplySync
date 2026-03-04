@@ -735,6 +735,105 @@ async def get_qualities(db: Session = Depends(get_db)):
         ]
     }
 
+# Universal Search Route
+@api_router.get("/dealer/search")
+async def universal_search(
+    q: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Universal search across sub-categories and products"""
+    if current_user.user_type != "dealer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only dealers can access this endpoint"
+        )
+    
+    if not q or len(q.strip()) < 2:
+        return {
+            "subcategories": [],
+            "products": [],
+            "total_results": 0
+        }
+    
+    query = q.lower().strip()
+    
+    # Search sub-categories
+    tiles_category = db.query(Category).filter(Category.slug == "tiles").first()
+    subcategories_results = []
+    
+    if tiles_category:
+        subcats = db.query(SubCategory).filter(
+            SubCategory.category_id == tiles_category.id,
+            SubCategory.is_active == True
+        ).all()
+        
+        for subcat in subcats:
+            make_type = db.query(MakeType).filter(MakeType.id == subcat.make_type_id).first()
+            
+            # Check if query matches
+            if (query in subcat.name.lower() or 
+                query in subcat.size.lower() or
+                query in f"{subcat.height_mm}".lower() or
+                query in f"{subcat.width_mm}".lower() or
+                (make_type and query in make_type.name.lower())):
+                
+                # Count products for this merchant
+                product_count = db.query(func.count(Product.id)).filter(
+                    Product.sub_category_id == subcat.id,
+                    Product.merchant_id == current_user.merchant_id,
+                    Product.is_active == True
+                ).scalar()
+                
+                subcategories_results.append({
+                    "id": str(subcat.id),
+                    "name": subcat.name,
+                    "size": subcat.size,
+                    "size_display": f"{subcat.height_inches}\" x {subcat.width_inches}\"",
+                    "make_type": make_type.name if make_type else "",
+                    "product_count": product_count or 0,
+                    "type": "subcategory"
+                })
+    
+    # Search products (only this merchant's products)
+    products = db.query(Product).filter(
+        Product.merchant_id == current_user.merchant_id,
+        Product.is_active == True
+    ).all()
+    
+    products_results = []
+    for product in products:
+        # Get related data
+        surface_type = db.query(SurfaceType).filter(SurfaceType.id == product.surface_type_id).first()
+        quality = db.query(Quality).filter(Quality.id == product.quality_id).first()
+        subcat = db.query(SubCategory).filter(SubCategory.id == product.sub_category_id).first()
+        
+        # Check if query matches
+        if (query in product.brand.lower() or
+            query in product.name.lower() or
+            (product.sku and query in product.sku.lower()) or
+            (surface_type and query in surface_type.name.lower()) or
+            (quality and query in quality.name.lower())):
+            
+            products_results.append({
+                "id": str(product.id),
+                "brand": product.brand,
+                "name": product.name,
+                "sku": product.sku,
+                "surface_type": surface_type.name if surface_type else "",
+                "quality": quality.name if quality else "",
+                "current_quantity": product.current_quantity,
+                "subcategory_id": str(product.sub_category_id),
+                "subcategory_name": subcat.name if subcat else "",
+                "type": "product"
+            })
+    
+    return {
+        "subcategories": subcategories_results[:10],  # Limit to 10
+        "products": products_results[:10],  # Limit to 10
+        "total_results": len(subcategories_results) + len(products_results)
+    }
+
 # Health check
 @api_router.get("/")
 async def root():

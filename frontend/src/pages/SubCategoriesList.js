@@ -12,33 +12,16 @@ const SubCategoriesList = () => {
   const { t } = useTranslation(['inventory', 'common']);
   const navigate = useNavigate();
   const [subcategories, setSubcategories] = useState([]);
-  const [filteredSubcategories, setFilteredSubcategories] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchSubcategories();
   }, []);
 
-  useEffect(() => {
-    if (searchQuery) {
-      const filtered = subcategories.filter(subcat =>
-        subcat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        subcat.size.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        subcat.make_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        subcat.size_mm.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setFilteredSubcategories(filtered);
-    } else {
-      setFilteredSubcategories(subcategories);
-    }
-  }, [searchQuery, subcategories]);
-
   const fetchSubcategories = async () => {
     try {
       const response = await api.get('/api/dealer/subcategories');
       setSubcategories(response.data.subcategories);
-      setFilteredSubcategories(response.data.subcategories);
     } catch (error) {
       console.error('Failed to fetch subcategories:', error);
     } finally {
@@ -66,7 +49,7 @@ const SubCategoriesList = () => {
         </div>
 
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-display font-bold text-slate">
                 {t('inventory:title')}
@@ -81,17 +64,6 @@ const SubCategoriesList = () => {
               {t('inventory:add_category')}
             </Button>
           </div>
-
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <Input
-              type="text"
-              placeholder="Search categories by name, size, or type..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-12 py-6"
-            />
-          </div>
         </div>
 
         {loading ? (
@@ -99,7 +71,7 @@ const SubCategoriesList = () => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange mx-auto"></div>
             <p className="mt-4 text-slate-light">{t('common:loading')}</p>
           </div>
-        ) : filteredSubcategories.length === 0 ? (
+        ) : subcategories.length === 0 ? (
           <Card className="border-2 border-dashed border-gray-300">
             <CardContent className="p-12 text-center">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -121,7 +93,7 @@ const SubCategoriesList = () => {
           </Card>
         ) : (
           <div className="grid grid-cols-1 gap-4">
-            {filteredSubcategories.map((subcat) => (
+            {subcategories.map((subcat) => (
               <Card key={subcat.id} className="hover:shadow-lg transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
@@ -196,10 +168,10 @@ const SubCategoriesList = () => {
           </div>
         )}
 
-        {filteredSubcategories.length > 0 && (
+        {subcategories.length > 0 && (
           <div className="mt-8 flex items-center justify-between">
             <p className="text-sm text-slate-light">
-              {t('inventory:showing')} <span className="font-semibold">{filteredSubcategories.length}</span> {t('inventory:of')} <span className="font-semibold">{subcategories.length}</span> {t('inventory:categories')}
+              {t('inventory:showing')} <span className="font-semibold">{subcategories.length}</span> {t('inventory:categories')}
             </p>
           </div>
         )}
