@@ -514,30 +514,52 @@ async def update_product(
     # Track changes for activity log
     changes_made = []
     
-    # Update fields and track changes
+    # Helper function to get name from ID
+    def get_name_by_id(model, id_value):
+        if not id_value:
+            return None
+        obj = db.query(model).filter(model.id == id_value).first()
+        return obj.name if obj else str(id_value)
+    
+    # Update fields and track changes with human-readable names
     if 'brand' in request and request['brand'] != product.brand:
         changes_made.append({"field": "brand", "old_value": product.brand, "new_value": request['brand']})
         product.brand = request['brand']
+    
     if 'name' in request and request['name'] != product.name:
         changes_made.append({"field": "name", "old_value": product.name, "new_value": request['name']})
         product.name = request['name']
+    
     if 'sku' in request and request['sku'] != product.sku:
-        changes_made.append({"field": "sku", "old_value": product.sku, "new_value": request['sku']})
+        changes_made.append({"field": "sku", "old_value": product.sku or "Not set", "new_value": request['sku'] or "Not set"})
         product.sku = request['sku']
+    
     if 'surface_type_id' in request and request['surface_type_id'] != str(product.surface_type_id):
-        changes_made.append({"field": "surface_type_id", "old_value": str(product.surface_type_id), "new_value": request['surface_type_id']})
+        old_name = get_name_by_id(SurfaceType, product.surface_type_id)
+        new_name = get_name_by_id(SurfaceType, request['surface_type_id'])
+        changes_made.append({"field": "surface_type", "old_value": old_name, "new_value": new_name})
         product.surface_type_id = request['surface_type_id']
+    
     if 'application_type_id' in request and request['application_type_id'] != str(product.application_type_id):
-        changes_made.append({"field": "application_type_id", "old_value": str(product.application_type_id), "new_value": request['application_type_id']})
+        old_name = get_name_by_id(ApplicationType, product.application_type_id)
+        new_name = get_name_by_id(ApplicationType, request['application_type_id'])
+        changes_made.append({"field": "application_type", "old_value": old_name, "new_value": new_name})
         product.application_type_id = request['application_type_id']
+    
     if 'body_type_id' in request and request['body_type_id'] != str(product.body_type_id):
-        changes_made.append({"field": "body_type_id", "old_value": str(product.body_type_id), "new_value": request['body_type_id']})
+        old_name = get_name_by_id(BodyType, product.body_type_id)
+        new_name = get_name_by_id(BodyType, request['body_type_id'])
+        changes_made.append({"field": "body_type", "old_value": old_name, "new_value": new_name})
         product.body_type_id = request['body_type_id']
+    
     if 'quality_id' in request and request['quality_id'] != str(product.quality_id):
-        changes_made.append({"field": "quality_id", "old_value": str(product.quality_id), "new_value": request['quality_id']})
+        old_name = get_name_by_id(Quality, product.quality_id)
+        new_name = get_name_by_id(Quality, request['quality_id'])
+        changes_made.append({"field": "quality", "old_value": old_name, "new_value": new_name})
         product.quality_id = request['quality_id']
+    
     if 'packing_per_box' in request and request['packing_per_box'] != product.packing_per_box:
-        changes_made.append({"field": "packing_per_box", "old_value": product.packing_per_box, "new_value": request['packing_per_box']})
+        changes_made.append({"field": "packing_per_box", "old_value": f"{product.packing_per_box} pieces", "new_value": f"{request['packing_per_box']} pieces"})
         product.packing_per_box = request['packing_per_box']
     
     # Update timestamp
