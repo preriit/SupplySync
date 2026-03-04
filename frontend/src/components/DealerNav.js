@@ -69,8 +69,8 @@ const DealerNav = () => {
     if (result.type === 'subcategory') {
       navigate(`/dealer/inventory/${result.id}/products`);
     } else if (result.type === 'product') {
-      // Navigate to product detail page instead of subcategory page
-      navigate(`/dealer/products/${result.id}`);
+      // Navigate to product detail page with subcategory_id
+      navigate(`/dealer/inventory/${result.subcategory_id}/products/${result.id}`);
     }
     setShowResults(false);
     setSearchQuery('');
