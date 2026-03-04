@@ -214,13 +214,78 @@ async def get_dashboard_stats(
     # Total inventory value - NOTE: Price not implemented yet
     inventory_value = 0  # Will be calculated once pricing is added
     
+    # Recent Activity - Get last 10 activities with product details
+    recent_activities = db.query(
+        ProductActivityLog.activity_type,
+        ProductActivityLog.description,
+        ProductActivityLog.created_at,
+        Product.brand,
+        Product.name
+    ).join(
+        Product, 
+        ProductActivityLog.product_id == Product.id
+    ).filter(
+        ProductActivityLog.merchant_id == merchant_id
+    ).order_by(
+        ProductActivityLog.created_at.desc()
+    ).limit(10).all()
+    
+    # Format recent activities for frontend
+    formatted_activities = []
+    for activity in recent_activities:
+        activity_type, description, created_at, brand, product_name = activity
+        
+        # Create human-readable title
+        product_display = f"{brand} {product_name}" if brand and product_name else "Product"
+        
+        # Use description if available, otherwise generate from activity_type
+        if description:
+            title = description
+        else:
+            if activity_type == 'created':
+                title = f"Added new product: {product_display}"
+            elif activity_type == 'edited':
+                title = f"Updated product: {product_display}"
+            elif activity_type == 'deleted':
+                title = f"Deleted product: {product_display}"
+            elif activity_type == 'quantity_add':
+                title = f"Added stock to {product_display}"
+            elif activity_type == 'quantity_subtract':
+                title = f"Removed stock from {product_display}"
+            else:
+                title = f"{activity_type.title()} on {product_display}"
+        
+        # Calculate time ago
+        time_diff = datetime.now(timezone.utc) - created_at.replace(tzinfo=timezone.utc)
+        if time_diff.days > 0:
+            if time_diff.days == 1:
+                time_ago = "Yesterday"
+            elif time_diff.days < 7:
+                time_ago = f"{time_diff.days} days ago"
+            else:
+                time_ago = created_at.strftime("%b %d, %Y")
+        elif time_diff.seconds >= 3600:
+            hours = time_diff.seconds // 3600
+            time_ago = f"{hours} hour{'s' if hours > 1 else ''} ago"
+        elif time_diff.seconds >= 60:
+            minutes = time_diff.seconds // 60
+            time_ago = f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+        else:
+            time_ago = "Just now"
+        
+        formatted_activities.append({
+            "title": title,
+            "time": time_ago,
+            "action": activity_type
+        })
+    
     return {
         "total_products": total_products or 0,
         "active_products": active_products or 0,
         "low_stock_items": low_stock or 0,
         "out_of_stock_items": out_of_stock or 0,
         "inventory_value": float(inventory_value),
-        "recent_activity": []
+        "recent_activity": formatted_activities
     }
 
 # Sub-Categories Routes
