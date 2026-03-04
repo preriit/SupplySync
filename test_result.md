@@ -101,3 +101,122 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  B2B Tile/Flooring Marketplace (SupplySync.in) - Dealer-centric features with inventory management.
+  Current focus: Implement quantity transaction feature with +/- buttons for add/subtract inventory.
+
+backend:
+  - task: "Product Transactions API"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py (lines 420-568)"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          Implemented two endpoints:
+          - POST /api/dealer/products/{product_id}/transactions (create transaction)
+          - GET /api/dealer/products/{product_id}/transactions (get history)
+          Validation: integer only, positive numbers, allows negative final quantity.
+          Tested manually with curl - working perfectly.
+  
+  - task: "Database Schema - product_transactions table"
+    implemented: true
+    working: true
+    file: "/app/backend/models.py (ProductTransaction model)"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          Created product_transactions table with proper constraints.
+          Logs: transaction_type, quantity, quantity_before, quantity_after, notes, timestamps.
+          Foreign keys to products, merchants, users.
+
+frontend:
+  - task: "Product Transaction UI (+/- buttons with input)"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/ProductsList.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Implemented:
+          - Custom input field with +/- buttons for each product
+          - Integer validation (positive whole numbers only)
+          - Negative quantity confirmation dialog (Yes/No)
+          - Transaction dialog for entering quantity
+          - Real-time UI updates after transaction
+          - History button to view transactions
+          Not yet tested via UI.
+
+  - task: "Transaction History Dialog"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/ProductsList.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Dialog showing:
+          - List of all transactions (add/subtract)
+          - Timestamps, user, quantity changes
+          - Color-coded badges (green for add, red for subtract)
+          Not yet tested via UI.
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: true
+
+test_plan:
+  current_focus:
+    - "Product Transaction UI - Add quantity"
+    - "Product Transaction UI - Subtract quantity"
+    - "Negative quantity confirmation"
+    - "Transaction History viewing"
+  stuck_tasks: []
+  test_all: true
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Implemented complete quantity transaction feature (P0 priority):
+      
+      Backend:
+      - Fixed PostgreSQL connection (was not running, installed and configured)
+      - Created product_transactions table with proper schema
+      - Implemented POST and GET endpoints for transactions
+      - Validated: integer only, positive numbers, handles negative final quantity
+      - Manually tested with curl - all working
+      
+      Frontend:
+      - Added +/- buttons with custom input field on ProductsList
+      - Integer validation implemented
+      - Negative quantity confirmation dialog
+      - Transaction history dialog with full transaction log
+      - Toast notifications for success/error
+      
+      Needs Testing:
+      - Full E2E testing via playwright
+      - Test add transaction
+      - Test subtract transaction (positive result)
+      - Test subtract transaction (negative result) + confirmation
+      - Test transaction history view
+      - Test integer validation
+      - Test UI updates after transactions

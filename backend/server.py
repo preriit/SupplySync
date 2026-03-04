@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from database import get_db
 from models import (
     User, Merchant, Product, SubCategory, MakeType, 
-    SurfaceType, ApplicationType, BodyType, Quality, Category, Size
+    SurfaceType, ApplicationType, BodyType, Quality, Category, Size, ProductTransaction
 )
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
 from sqlalchemy import func
@@ -415,6 +415,150 @@ async def create_product(
             "name": new_product.name,
             "quantity": new_product.current_quantity
         }
+    }
+
+# Product Transactions Routes
+@api_router.post("/dealer/products/{product_id}/transactions")
+async def create_product_transaction(
+    product_id: str,
+    request: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new product transaction (add or subtract quantity)"""
+    if current_user.user_type != "dealer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only dealers can access this endpoint"
+        )
+    
+    # Validate request
+    transaction_type = request.get('transaction_type')
+    quantity = request.get('quantity')
+    
+    if not transaction_type or transaction_type not in ['add', 'subtract']:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="transaction_type must be 'add' or 'subtract'"
+        )
+    
+    if not quantity or not isinstance(quantity, int) or quantity <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="quantity must be a positive integer"
+        )
+    
+    # Get product
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.merchant_id == current_user.merchant_id
+    ).first()
+    
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found"
+        )
+    
+    # Calculate new quantity
+    quantity_before = product.current_quantity
+    if transaction_type == 'add':
+        quantity_after = quantity_before + quantity
+    else:  # subtract
+        quantity_after = quantity_before - quantity
+    
+    # Create transaction record
+    transaction = ProductTransaction(
+        product_id=product.id,
+        merchant_id=current_user.merchant_id,
+        user_id=current_user.id,
+        transaction_type=transaction_type,
+        quantity=quantity,
+        quantity_before=quantity_before,
+        quantity_after=quantity_after,
+        notes=request.get('notes')
+    )
+    
+    # Update product quantity
+    product.current_quantity = quantity_after
+    
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+    db.refresh(product)
+    
+    return {
+        "message": f"Transaction successful: {transaction_type} {quantity} boxes",
+        "transaction": {
+            "id": str(transaction.id),
+            "type": transaction.transaction_type,
+            "quantity": transaction.quantity,
+            "quantity_before": transaction.quantity_before,
+            "quantity_after": transaction.quantity_after,
+            "created_at": transaction.created_at.isoformat()
+        },
+        "product": {
+            "id": str(product.id),
+            "current_quantity": product.current_quantity
+        }
+    }
+
+@api_router.get("/dealer/products/{product_id}/transactions")
+async def get_product_transactions(
+    product_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    limit: int = 50
+):
+    """Get transaction history for a product"""
+    if current_user.user_type != "dealer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only dealers can access this endpoint"
+        )
+    
+    # Verify product belongs to merchant
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.merchant_id == current_user.merchant_id
+    ).first()
+    
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found"
+        )
+    
+    # Get transactions
+    transactions = db.query(ProductTransaction).filter(
+        ProductTransaction.product_id == product_id
+    ).order_by(ProductTransaction.created_at.desc()).limit(limit).all()
+    
+    transaction_list = []
+    for txn in transactions:
+        # Get user who made the transaction
+        user = db.query(User).filter(User.id == txn.user_id).first()
+        
+        transaction_list.append({
+            "id": str(txn.id),
+            "transaction_type": txn.transaction_type,
+            "quantity": txn.quantity,
+            "quantity_before": txn.quantity_before,
+            "quantity_after": txn.quantity_after,
+            "notes": txn.notes,
+            "created_at": txn.created_at.isoformat(),
+            "created_by": user.username if user else "Unknown"
+        })
+    
+    return {
+        "product": {
+            "id": str(product.id),
+            "brand": product.brand,
+            "name": product.name,
+            "current_quantity": product.current_quantity
+        },
+        "transactions": transaction_list,
+        "total_count": len(transaction_list)
     }
 
 @api_router.post("/dealer/subcategories")

@@ -6,18 +6,50 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Plus, Package, Edit, Trash2, Eye, ArrowLeft, Grid3x3, Box } from 'lucide-react';
+import { Search, Plus, Package, Edit, Trash2, Eye, ArrowLeft, Grid3x3, Box, Minus, History } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
 import api from '../utils/api';
 
 const ProductsList = () => {
   const { t } = useTranslation(['inventory', 'common']);
   const navigate = useNavigate();
   const { subcategoryId } = useParams();
+  const { toast } = useToast();
   const [subcategory, setSubcategory] = useState(null);
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  
+  // Transaction state
+  const [transactionProduct, setTransactionProduct] = useState(null);
+  const [transactionQuantity, setTransactionQuantity] = useState('');
+  const [showNegativeConfirm, setShowNegativeConfirm] = useState(false);
+  const [pendingTransaction, setPendingTransaction] = useState(null);
+  const [transacting, setTransacting] = useState(false);
+  
+  // Transaction history state
+  const [historyProduct, setHistoryProduct] = useState(null);
+  const [transactionHistory, setTransactionHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -50,6 +82,99 @@ const ProductsList = () => {
 
   const handleAddProduct = () => {
     navigate(`/dealer/inventory/${subcategoryId}/products/add`);
+  };
+
+  const handleTransaction = async (product, type) => {
+    const qty = parseInt(transactionQuantity);
+    
+    // Validate integer
+    if (!qty || isNaN(qty) || qty <= 0 || !Number.isInteger(qty)) {
+      toast({
+        title: 'Invalid Quantity',
+        description: 'Please enter a valid positive whole number',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    // Check for negative result
+    if (type === 'subtract') {
+      const newQuantity = product.current_quantity - qty;
+      if (newQuantity < 0) {
+        // Show confirmation dialog
+        setPendingTransaction({ product, type, quantity: qty, newQuantity });
+        setShowNegativeConfirm(true);
+        return;
+      }
+    }
+    
+    // Execute transaction
+    await executeTransaction(product, type, qty);
+  };
+
+  const executeTransaction = async (product, type, qty) => {
+    setTransacting(true);
+    try {
+      const response = await api.post(`/api/dealer/products/${product.id}/transactions`, {
+        transaction_type: type,
+        quantity: qty
+      });
+      
+      // Update product quantity in state
+      const updatedProducts = products.map(p => 
+        p.id === product.id 
+          ? { ...p, current_quantity: response.data.product.current_quantity }
+          : p
+      );
+      setProducts(updatedProducts);
+      setFilteredProducts(updatedProducts);
+      
+      toast({
+        title: 'Transaction Successful',
+        description: `${type === 'add' ? 'Added' : 'Subtracted'} ${qty} boxes`,
+      });
+      
+      // Close dialog and reset
+      setTransactionProduct(null);
+      setTransactionQuantity('');
+      setShowNegativeConfirm(false);
+      setPendingTransaction(null);
+    } catch (error) {
+      toast({
+        title: 'Transaction Failed',
+        description: error.response?.data?.detail || 'Failed to process transaction',
+        variant: 'destructive',
+      });
+    } finally {
+      setTransacting(false);
+    }
+  };
+
+  const handleNegativeConfirm = async () => {
+    if (pendingTransaction) {
+      await executeTransaction(
+        pendingTransaction.product,
+        pendingTransaction.type,
+        pendingTransaction.quantity
+      );
+    }
+  };
+
+  const viewTransactionHistory = async (product) => {
+    setHistoryProduct(product);
+    setLoadingHistory(true);
+    try {
+      const response = await api.get(`/api/dealer/products/${product.id}/transactions`);
+      setTransactionHistory(response.data.transactions);
+    } catch (error) {
+      toast({
+        title: 'Failed to Load History',
+        description: error.response?.data?.detail || 'Could not load transaction history',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingHistory(false);
+    }
   };
 
   return (
@@ -191,12 +316,35 @@ const ProductsList = () => {
                             {product.surface_type}
                           </Badge>
 
-                          {/* Quantity */}
-                          <div className="flex items-center space-x-2 text-slate-light pt-2">
-                            <Box className="h-4 w-4" />
-                            <span className="text-sm">
-                              {product.current_quantity} boxes
-                            </span>
+                          {/* Quantity Transaction Controls */}
+                          <div className="pt-3 border-t border-gray-100">
+                            <label className="text-xs text-slate-light mb-1 block">Quantity (boxes)</label>
+                            <div className="flex items-center space-x-2">
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-9 w-9 border-red-500 text-red-500 hover:bg-red-50"
+                                onClick={() => setTransactionProduct({ ...product, type: 'subtract' })}
+                              >
+                                <Minus className="h-4 w-4" />
+                              </Button>
+                              
+                              <div className="flex-1 text-center">
+                                <div className="text-2xl font-bold text-slate">
+                                  {product.current_quantity}
+                                </div>
+                                <div className="text-xs text-slate-light">boxes</div>
+                              </div>
+                              
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-9 w-9 border-green-500 text-green-500 hover:bg-green-50"
+                                onClick={() => setTransactionProduct({ ...product, type: 'add' })}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
 
                           {/* Actions */}
@@ -205,9 +353,10 @@ const ProductsList = () => {
                               variant="outline"
                               size="sm"
                               className="flex-1 text-orange border-orange hover:bg-orange-50"
+                              onClick={() => viewTransactionHistory(product)}
                             >
-                              <Eye className="mr-2 h-4 w-4" />
-                              View
+                              <History className="mr-2 h-4 w-4" />
+                              History
                             </Button>
                             <Button
                               variant="outline"
@@ -215,13 +364,6 @@ const ProductsList = () => {
                               className="hover:bg-gray-50"
                             >
                               <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="hover:bg-red-50 hover:text-red-600"
-                            >
-                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
@@ -239,6 +381,168 @@ const ProductsList = () => {
           </>
         )}
       </div>
+      
+      {/* Transaction Dialog */}
+      <Dialog open={transactionProduct !== null} onOpenChange={() => {
+        setTransactionProduct(null);
+        setTransactionQuantity('');
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {transactionProduct?.type === 'add' ? 'Add' : 'Subtract'} Quantity
+            </DialogTitle>
+            <DialogDescription>
+              {transactionProduct?.brand} - {transactionProduct?.name}
+              <br />
+              Current Quantity: {transactionProduct?.current_quantity} boxes
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">
+                Enter quantity to {transactionProduct?.type}
+              </label>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                placeholder="Enter whole number"
+                value={transactionQuantity}
+                onChange={(e) => setTransactionQuantity(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && transactionProduct) {
+                    handleTransaction(transactionProduct, transactionProduct.type);
+                  }
+                }}
+              />
+              <p className="text-xs text-slate-light mt-1">
+                Must be a positive whole number (integer)
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setTransactionProduct(null);
+                setTransactionQuantity('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => handleTransaction(transactionProduct, transactionProduct?.type)}
+              disabled={transacting}
+              className={transactionProduct?.type === 'add' ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'}
+            >
+              {transacting ? 'Processing...' : transactionProduct?.type === 'add' ? 'Add Quantity' : 'Subtract Quantity'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Negative Quantity Confirmation */}
+      <AlertDialog open={showNegativeConfirm} onOpenChange={setShowNegativeConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Quantity will become negative</AlertDialogTitle>
+            <AlertDialogDescription>
+              Current quantity: {pendingTransaction?.product?.current_quantity} boxes
+              <br />
+              Subtracting: {pendingTransaction?.quantity} boxes
+              <br />
+              <strong className="text-red-600">
+                New quantity will be: {pendingTransaction?.newQuantity} boxes
+              </strong>
+              <br /><br />
+              Do you want to proceed with this transaction?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setShowNegativeConfirm(false);
+              setPendingTransaction(null);
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleNegativeConfirm}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              Yes, Proceed
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
+      {/* Transaction History Dialog */}
+      <Dialog open={historyProduct !== null} onOpenChange={() => setHistoryProduct(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Transaction History</DialogTitle>
+            <DialogDescription>
+              {historyProduct?.brand} - {historyProduct?.name}
+              <br />
+              Current Quantity: {historyProduct?.current_quantity} boxes
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-2">
+            {loadingHistory ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange mx-auto"></div>
+                <p className="mt-2 text-sm text-slate-light">Loading history...</p>
+              </div>
+            ) : transactionHistory.length === 0 ? (
+              <div className="text-center py-8 text-slate-light">
+                <Package className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                <p>No transaction history yet</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {transactionHistory.map((txn) => (
+                  <Card key={txn.id} className="border">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <Badge 
+                              variant={txn.transaction_type === 'add' ? 'default' : 'destructive'}
+                              className={txn.transaction_type === 'add' ? 'bg-green-500' : 'bg-red-500'}
+                            >
+                              {txn.transaction_type === 'add' ? '+' : '-'} {txn.quantity}
+                            </Badge>
+                            <span className="text-sm text-slate-light">
+                              {new Date(txn.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="mt-2 text-sm">
+                            <span className="text-slate-light">Quantity: </span>
+                            <span className="font-medium">
+                              {txn.quantity_before} → {txn.quantity_after} boxes
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-light mt-1">
+                            By: {txn.created_by}
+                          </div>
+                          {txn.notes && (
+                            <div className="text-xs text-slate-light mt-1 italic">
+                              Note: {txn.notes}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
