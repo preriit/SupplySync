@@ -48,6 +48,11 @@ const ImageUpload = ({ productId, images = [], onImagesChange }) => {
           headers: {
             'Content-Type': 'multipart/form-data',
           },
+          transformRequest: [(data, headers) => {
+            // Let browser set the Content-Type with boundary for FormData
+            delete headers['Content-Type'];
+            return data;
+          }],
         }
       );
 
