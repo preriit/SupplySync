@@ -8,9 +8,15 @@ import AddSubCategory from './pages/AddSubCategory';
 import ProductsList from './pages/ProductsList';
 import AddProduct from './pages/AddProduct';
 import ProductDetail from './pages/ProductDetail';
+
+// Admin Pages
+import AdminLogin from './pages/AdminLogin';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminUsers from './pages/AdminUsers';
+
 import './App.css';
 
-// Protected Route component
+// Protected Route component for dealers
 const ProtectedRoute = ({ children, requiredType }) => {
   const token = localStorage.getItem('token');
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -26,6 +32,18 @@ const ProtectedRoute = ({ children, requiredType }) => {
   return children;
 };
 
+// Protected Route component for admin
+const AdminProtectedRoute = ({ children }) => {
+  const token = localStorage.getItem('admin_token');
+  const admin = JSON.parse(localStorage.getItem('admin_user') || '{}');
+
+  if (!token || admin.user_type !== 'admin') {
+    return <Navigate to="/admin/login" replace />;
+  }
+
+  return children;
+};
+
 function App() {
   return (
     <Router>
@@ -34,6 +52,24 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
 
+        {/* Admin Routes */}
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route 
+          path="/admin/dashboard" 
+          element={
+            <AdminProtectedRoute>
+              <AdminDashboard />
+            </AdminProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin/users" 
+          element={
+            <AdminProtectedRoute>
+              <AdminUsers />
+            </AdminProtectedRoute>
+          } 
+        />
         
         {/* Dealer Routes */}
         <Route 

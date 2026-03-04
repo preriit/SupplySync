@@ -86,6 +86,15 @@ class Merchant(Base):
     postal_code = Column(String(20))
     gst_number = Column(String(20))
     pan = Column(String(20))
+    
+    # Subscription fields
+    subscription_status = Column(String(20), default='trial')  # trial, active, expired, suspended
+    subscription_plan = Column(String(50))
+    subscription_started_at = Column(DateTime(timezone=True))
+    subscription_expires_at = Column(DateTime(timezone=True))
+    is_active = Column(Boolean, default=True)
+    deleted_at = Column(DateTime(timezone=True))
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     extra_data = Column('metadata', JSON)
@@ -98,9 +107,9 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False)
     phone = Column(String(20), unique=True)
     password_hash = Column(String(255), nullable=False)
-    user_type = Column(String(20), nullable=False)  # 'dealer' or 'subdealer'
+    user_type = Column(String(20), nullable=False)  # 'dealer', 'subdealer', or 'admin'
     merchant_id = Column(UUID(as_uuid=True), ForeignKey('merchants.id'))
-    role = Column(String(20))  # For dealers: 'admin', 'manager', 'viewer'
+    role = Column(String(20))  # 'super_admin' (platform admin), 'admin', 'manager', 'viewer'
     business_name = Column(String(255))  # For subdealers
     business_address = Column(Text)  # For subdealers
     gst_number = Column(String(20))  # For subdealers
@@ -109,6 +118,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_login = Column(DateTime(timezone=True))
+    deleted_at = Column(DateTime(timezone=True))  # Soft delete support
     extra_data = Column('metadata', JSON)
 
 class Category(Base):

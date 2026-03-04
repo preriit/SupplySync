@@ -1608,7 +1608,6 @@ async def reorder_product_images(
     db.commit()
     
     return {"message": "Images reordered successfully"}
-app.include_router(api_router)
 
 
 # =====================================================
@@ -1645,10 +1644,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include admin routes
+from admin_routes import admin_router
+api_router.include_router(admin_router)
+
+# Include API router in main app
+app.include_router(api_router)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
 
