@@ -1135,50 +1135,6 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 # Include router
-app.include_router(api_router)
-
-# Helper function to log product activities
-def log_product_activity(
-    db: Session,
-    product_id: str,
-    merchant_id: str,
-    user_id: str,
-    activity_type: str,
-    changes: dict = None,
-    description: str = None
-):
-    """Log product activity for audit trail"""
-    activity = ProductActivityLog(
-        product_id=product_id,
-        merchant_id=merchant_id,
-        user_id=user_id,
-        activity_type=activity_type,
-        changes=changes,
-        description=description
-    )
-    db.add(activity)
-    # Note: Caller should commit after their main operation
-
-
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-
-
-# =====================================================
 # IMAGE UPLOAD ENDPOINTS
 # =====================================================
 
@@ -1497,3 +1453,47 @@ async def reorder_product_images(
     db.commit()
     
     return {"message": "Images reordered successfully"}
+app.include_router(api_router)
+
+
+# =====================================================
+
+# Helper function to log product activities
+def log_product_activity(
+    db: Session,
+    product_id: str,
+    merchant_id: str,
+    user_id: str,
+    activity_type: str,
+    changes: dict = None,
+    description: str = None
+):
+    """Log product activity for audit trail"""
+    activity = ProductActivityLog(
+        product_id=product_id,
+        merchant_id=merchant_id,
+        user_id=user_id,
+        activity_type=activity_type,
+        changes=changes,
+        description=description
+    )
+    db.add(activity)
+    # Note: Caller should commit after their main operation
+
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
