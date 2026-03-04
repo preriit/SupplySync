@@ -214,10 +214,11 @@ async def get_dashboard_stats(
     # Total inventory value - NOTE: Price not implemented yet
     inventory_value = 0  # Will be calculated once pricing is added
     
-    # Recent Activity - Get last 10 activities with product details
+    # Recent Activity - Get last 5 activities with product details
     recent_activities = db.query(
         ProductActivityLog.activity_type,
         ProductActivityLog.description,
+        ProductActivityLog.changes,
         ProductActivityLog.created_at,
         Product.brand,
         Product.name
@@ -228,32 +229,43 @@ async def get_dashboard_stats(
         ProductActivityLog.merchant_id == merchant_id
     ).order_by(
         ProductActivityLog.created_at.desc()
-    ).limit(10).all()
+    ).limit(5).all()  # Changed from 10 to 5
     
     # Format recent activities for frontend
     formatted_activities = []
     for activity in recent_activities:
-        activity_type, description, created_at, brand, product_name = activity
+        activity_type, description, changes, created_at, brand, product_name = activity
         
-        # Create human-readable title
-        product_display = f"{brand} {product_name}" if brand and product_name else "Product"
+        # Create product display name
+        tile_name = f"{brand} {product_name}" if brand and product_name else "Product"
         
-        # Use description if available, otherwise generate from activity_type
-        if description:
-            title = description
-        else:
-            if activity_type == 'created':
-                title = f"Added new product: {product_display}"
-            elif activity_type == 'edited':
-                title = f"Updated product: {product_display}"
-            elif activity_type == 'deleted':
-                title = f"Deleted product: {product_display}"
-            elif activity_type == 'quantity_add':
-                title = f"Added stock to {product_display}"
-            elif activity_type == 'quantity_subtract':
-                title = f"Removed stock from {product_display}"
+        # Create human-readable title with more details
+        if activity_type == 'created':
+            title = f"Added new product: {tile_name}"
+        elif activity_type == 'edited':
+            title = f"Updated product: {tile_name}"
+        elif activity_type == 'deleted':
+            title = f"Deleted product: {tile_name}"
+        elif activity_type == 'quantity_add':
+            # Extract quantity and values from changes JSON
+            if changes:
+                quantity = changes.get('quantity_change', 1)
+                before = changes.get('from', 0)
+                after = changes.get('to', 0)
+                title = f"Add {quantity} boxes {tile_name} : {before} → {after}"
             else:
-                title = f"{activity_type.title()} on {product_display}"
+                title = f"Added stock to {tile_name}"
+        elif activity_type == 'quantity_subtract':
+            # Extract quantity and values from changes JSON
+            if changes:
+                quantity = changes.get('quantity_change', 1)
+                before = changes.get('from', 0)
+                after = changes.get('to', 0)
+                title = f"Subtract {quantity} boxes {tile_name} : {before} → {after}"
+            else:
+                title = f"Removed stock from {tile_name}"
+        else:
+            title = f"{activity_type.title()} {tile_name}"
         
         # Calculate time ago
         time_diff = datetime.now(timezone.utc) - created_at.replace(tzinfo=timezone.utc)
