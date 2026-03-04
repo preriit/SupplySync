@@ -180,11 +180,27 @@ class ProductImage(Base):
     __tablename__ = "product_images"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    product_id = Column(UUID(as_uuid=True), ForeignKey('products.id', ondelete='CASCADE'))
+    product_id = Column(UUID(as_uuid=True), ForeignKey('products.id', ondelete='CASCADE'), nullable=False)
     image_url = Column(Text, nullable=False)
+    storage_type = Column(String(20), default='cloudinary')  # 's3' or 'cloudinary'
     is_primary = Column(Boolean, default=False)
     ordering = Column(Integer, default=0)
-    uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Cloudinary specific
+    public_url = Column(Text)
+    cloudinary_public_id = Column(String(255))
+    file_size_bytes = Column(Integer)
+    width_px = Column(Integer)
+    height_px = Column(Integer)
+    format = Column(String(10))
+    
+    # Color extraction
+    color_palette = Column(JSON)  # Array of hex colors
+    dominant_color = Column(String(7))  # Single hex color
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    uploaded_by = Column(UUID(as_uuid=True), ForeignKey('users.id'))
 
 class ProductTransaction(Base):
     __tablename__ = "product_transactions"
@@ -221,3 +237,5 @@ class ProductActivityLog(Base):
     
     # Timestamp
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+

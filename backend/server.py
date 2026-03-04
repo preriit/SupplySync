@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from database import get_db
 from models import (
     User, Merchant, Product, SubCategory, MakeType, 
-    SurfaceType, ApplicationType, BodyType, Quality, Category, Size, ProductTransaction, ProductActivityLog
+    SurfaceType, ApplicationType, BodyType, Quality, Category, Size, ProductTransaction, ProductActivityLog, ProductImage
 )
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
 from sqlalchemy import func
