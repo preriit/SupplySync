@@ -117,7 +117,7 @@ const LoginPage = () => {
           <CardFooter className="flex justify-center">
             <p className="text-sm text-muted-foreground">
               {t('auth:no_account')}{' '}
-              <a href="/register" className="text-orange hover:underline">
+              <a href="/signup" className="text-orange hover:underline">
                 {t('auth:sign_up')}
               </a>
             </p>
