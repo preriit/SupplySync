@@ -6,6 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -23,6 +30,8 @@ const AdminReferenceData = () => {
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newItemName, setNewItemName] = useState('');
+  const [selectedBodyType, setSelectedBodyType] = useState('');
+  const [bodyTypes, setBodyTypes] = useState([]);
 
   const dataTypes = [
     { key: 'body_types', label: 'Body Types', icon: Package, color: 'bg-blue-500' },
@@ -35,6 +44,7 @@ const AdminReferenceData = () => {
 
   useEffect(() => {
     fetchSummary();
+    fetchBodyTypes();
   }, []);
 
   useEffect(() => {
@@ -58,6 +68,18 @@ const AdminReferenceData = () => {
     }
   };
 
+  const fetchBodyTypes = async () => {
+    try {
+      const token = localStorage.getItem('admin_token');
+      const response = await api.get('/admin/reference-data/body_types', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setBodyTypes(response.data);
+    } catch (error) {
+      console.error('Failed to fetch body types:', error);
+    }
+  };
+
   const fetchItems = async (dataType) => {
     try {
       const token = localStorage.getItem('admin_token');
@@ -77,16 +99,33 @@ const AdminReferenceData = () => {
       return;
     }
 
+    // For make_types, body type is required
+    if (selectedType === 'make_types' && !selectedBodyType) {
+      toast.error('Please select a body type');
+      return;
+    }
+
     try {
       const token = localStorage.getItem('admin_token');
+      const payload = { 
+        name: newItemName, 
+        display_order: 0 
+      };
+      
+      // Add body_type_id for make_types
+      if (selectedType === 'make_types') {
+        payload.body_type_id = selectedBodyType;
+      }
+      
       await api.post(
         `/admin/reference-data/${selectedType}`,
-        { name: newItemName, display_order: 0 },
+        payload,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
       toast.success('Item created successfully');
       setNewItemName('');
+      setSelectedBodyType('');
       setIsDialogOpen(false);
       fetchItems(selectedType);
       fetchSummary();
@@ -192,16 +231,49 @@ const AdminReferenceData = () => {
                         </DialogHeader>
                         <div className="space-y-4 py-4">
                           <div className="space-y-2">
-                            <Label htmlFor="name" className="text-slate-200">Name</Label>
+                            <Label htmlFor="name" className="text-slate-200">
+                              Name <span className="text-red-500">*</span>
+                            </Label>
                             <Input
                               id="name"
                               placeholder="Enter name..."
                               value={newItemName}
                               onChange={(e) => setNewItemName(e.target.value)}
                               className="bg-slate-900 border-slate-600 text-white"
-                              onKeyPress={(e) => e.key === 'Enter' && createItem()}
+                              onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && createItem()}
+                              required
                             />
                           </div>
+                          
+                          {/* Show Body Type selector only for Make Types */}
+                          {selectedType === 'make_types' && (
+                            <div className="space-y-2">
+                              <Label htmlFor="body_type" className="text-slate-200">
+                                Body Type <span className="text-red-500">*</span>
+                              </Label>
+                              <Select
+                                value={selectedBodyType}
+                                onValueChange={setSelectedBodyType}
+                                required
+                              >
+                                <SelectTrigger className="bg-slate-900 border-slate-600 text-white">
+                                  <SelectValue placeholder="Select body type..." />
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-800 border-slate-700">
+                                  {bodyTypes.map((bodyType) => (
+                                    <SelectItem 
+                                      key={bodyType.id} 
+                                      value={bodyType.id}
+                                      className="text-white"
+                                    >
+                                      {bodyType.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                          
                           <Button onClick={createItem} className="w-full bg-orange hover:bg-orange-dark">
                             Create
                           </Button>
@@ -223,12 +295,19 @@ const AdminReferenceData = () => {
                             key={item.id}
                             className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700"
                           >
-                            <span className="text-white">{item.name}</span>
+                            <div className="flex-1">
+                              <span className="text-white font-medium">{item.name}</span>
+                              {selectedType === 'make_types' && item.body_type_name && (
+                                <div className="text-xs text-slate-400 mt-1">
+                                  Body Type: {item.body_type_name}
+                                </div>
+                              )}
+                            </div>
                             <Button
                               size="sm"
                               variant="ghost"
                               onClick={() => deleteItem(item.id)}
-                              className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                              className="text-red-400 hover:text-red-300 hover:bg-red-500/10 ml-2"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>

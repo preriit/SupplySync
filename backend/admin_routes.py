@@ -357,6 +357,7 @@ from models import MakeType, ApplicationType, SurfaceType, BodyType, Quality, Si
 class ReferenceDataItem(BaseModel):
     name: str
     display_order: Optional[int] = 0
+    body_type_id: Optional[str] = None  # For make_types only
 
 @admin_router.get("/reference-data/summary")
 async def get_reference_data_summary(
@@ -401,6 +402,21 @@ async def get_reference_data_list(
     model = type_map[data_type]
     items = db.query(model).filter(model.is_active == True).order_by(model.display_order).all()
     
+    # Special handling for make_types to include body_type info
+    if data_type == "make_types":
+        return [
+            {
+                "id": str(item.id),
+                "name": item.name,
+                "display_order": item.display_order,
+                "is_active": item.is_active,
+                "created_at": item.created_at,
+                "body_type_id": str(item.body_type_id) if item.body_type_id else None,
+                "body_type_name": db.query(BodyType).filter(BodyType.id == item.body_type_id).first().name if item.body_type_id else None
+            }
+            for item in items
+        ]
+    
     return [
         {
             "id": str(item.id),
@@ -440,11 +456,28 @@ async def create_reference_data_item(
     if existing:
         raise HTTPException(status_code=400, detail=f"{item.name} already exists")
     
-    new_item = model(
-        name=item.name,
-        display_order=item.display_order,
-        is_active=True
-    )
+    # Special handling for make_types - requires body_type_id
+    if data_type == "make_types":
+        if not item.body_type_id:
+            raise HTTPException(status_code=400, detail="body_type_id is required for make types")
+        
+        # Verify body_type exists
+        body_type = db.query(BodyType).filter(BodyType.id == item.body_type_id).first()
+        if not body_type:
+            raise HTTPException(status_code=400, detail="Invalid body_type_id")
+        
+        new_item = model(
+            name=item.name,
+            body_type_id=item.body_type_id,
+            display_order=item.display_order,
+            is_active=True
+        )
+    else:
+        new_item = model(
+            name=item.name,
+            display_order=item.display_order,
+            is_active=True
+        )
     
     db.add(new_item)
     db.commit()
