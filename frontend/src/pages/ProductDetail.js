@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import api from '../utils/api';
+import ImageUpload from '../components/ImageUpload';
 
 const ProductDetail = () => {
   const navigate = useNavigate();
@@ -73,11 +74,24 @@ const ProductDetail = () => {
   // Activity log
   const [activityLog, setActivityLog] = useState([]);
   const [loadingActivity, setLoadingActivity] = useState(false);
+  
+  // Product images
+  const [images, setImages] = useState([]);
 
   useEffect(() => {
     fetchProduct();
     fetchReferenceData();
+    fetchImages();
   }, [productId]);
+  
+  const fetchImages = async () => {
+    try {
+      const response = await api.get(`/api/dealer/products/${productId}/images`);
+      setImages(response.data);
+    } catch (error) {
+      console.error('Error fetching images:', error);
+    }
+  };
 
   const fetchProduct = async () => {
     try {
@@ -751,6 +765,15 @@ const ProductDetail = () => {
                   ))}
                 </div>
               )}
+            </TabsContent>
+            
+            {/* Images Tab */}
+            <TabsContent value="images" className="flex-1 overflow-y-auto mt-4">
+              <ImageUpload 
+                productId={productId} 
+                images={images}
+                onImagesChange={setImages}
+              />
             </TabsContent>
           </Tabs>
         </DialogContent>

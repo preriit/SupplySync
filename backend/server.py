@@ -1175,3 +1175,325 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+
+# =====================================================
+# IMAGE UPLOAD ENDPOINTS
+# =====================================================
+
+import cloudinary
+import cloudinary.uploader
+from fastapi import UploadFile, File
+from colorthief import ColorThief
+from PIL import Image
+import io
+import tempfile
+
+# Configure Cloudinary
+cloudinary.config(
+    cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'),
+    api_key=os.environ.get('CLOUDINARY_API_KEY'),
+    api_secret=os.environ.get('CLOUDINARY_API_SECRET')
+)
+
+def rgb_to_hex(rgb):
+    """Convert RGB tuple to hex color"""
+    return '#{:02x}{:02x}{:02x}'.format(rgb[0], rgb[1], rgb[2])
+
+def extract_colors_from_image(image_bytes):
+    """Extract dominant colors from image using ColorThief"""
+    try:
+        # Save to temporary file for ColorThief
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
+            tmp_file.write(image_bytes)
+            tmp_file.flush()
+            
+            # Extract colors
+            color_thief = ColorThief(tmp_file.name)
+            
+            # Get dominant color
+            dominant_color = color_thief.get_color(quality=1)
+            
+            # Get color palette (top 5 colors)
+            palette = color_thief.get_palette(color_count=5, quality=1)
+            
+            # Convert to hex
+            dominant_hex = rgb_to_hex(dominant_color)
+            palette_hex = [rgb_to_hex(color) for color in palette]
+            
+            # Clean up temp file
+            os.unlink(tmp_file.name)
+            
+            return {
+                "dominant_color": dominant_hex,
+                "color_palette": palette_hex
+            }
+    except Exception as e:
+        logging.error(f"Color extraction error: {str(e)}")
+        return {
+            "dominant_color": None,
+            "color_palette": []
+        }
+
+class ImageUploadResponse(BaseModel):
+    id: str
+    image_url: str
+    is_primary: bool
+    ordering: int
+    dominant_color: Optional[str] = None
+    color_palette: Optional[List[str]] = None
+
+@api_router.post("/dealer/products/{product_id}/images/upload", response_model=List[ImageUploadResponse])
+async def upload_product_images(
+    product_id: str,
+    files: List[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Upload one or more images for a product with automatic color extraction"""
+    
+    # Verify product exists and belongs to user's merchant
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.merchant_id == current_user.merchant_id
+    ).first()
+    
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Get current max ordering
+    max_ordering = db.query(func.max(ProductImage.ordering)).filter(
+        ProductImage.product_id == product_id
+    ).scalar() or 0
+    
+    uploaded_images = []
+    
+    for idx, file in enumerate(files):
+        # Validate file type
+        if not file.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail=f"File {file.filename} is not an image")
+        
+        # Read file content
+        image_bytes = await file.read()
+        
+        # Get image dimensions using PIL
+        img = Image.open(io.BytesIO(image_bytes))
+        width, height = img.size
+        file_format = img.format.lower() if img.format else 'unknown'
+        
+        # Upload to Cloudinary
+        try:
+            upload_result = cloudinary.uploader.upload(
+                image_bytes,
+                folder="supplysync/products",
+                resource_type="image"
+            )
+            
+            # Extract colors
+            colors = extract_colors_from_image(image_bytes)
+            
+            # Create database record
+            new_image = ProductImage(
+                product_id=product_id,
+                image_url=upload_result['secure_url'],
+                public_url=upload_result['secure_url'],
+                cloudinary_public_id=upload_result['public_id'],
+                storage_type='cloudinary',
+                is_primary=False,  # Will be set by trigger if first image
+                ordering=max_ordering + idx + 1,
+                file_size_bytes=len(image_bytes),
+                width_px=width,
+                height_px=height,
+                format=file_format,
+                color_palette=colors['color_palette'],
+                dominant_color=colors['dominant_color'],
+                uploaded_by=current_user.id
+            )
+            
+            db.add(new_image)
+            db.flush()  # Get the ID
+            
+            uploaded_images.append({
+                "id": str(new_image.id),
+                "image_url": new_image.image_url,
+                "is_primary": new_image.is_primary,
+                "ordering": new_image.ordering,
+                "dominant_color": new_image.dominant_color,
+                "color_palette": new_image.color_palette
+            })
+            
+        except Exception as e:
+            logging.error(f"Upload error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to upload {file.filename}: {str(e)}")
+    
+    db.commit()
+    
+    # Log activity
+    log_product_activity(
+        db=db,
+        product_id=product_id,
+        user_id=current_user.id,
+        merchant_id=current_user.merchant_id,
+        activity_type='images_uploaded',
+        description=f"Uploaded {len(files)} image(s)",
+        changes={"image_count": len(files)}
+    )
+    
+    return uploaded_images
+
+@api_router.get("/dealer/products/{product_id}/images")
+async def get_product_images(
+    product_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all images for a product"""
+    
+    # Verify product exists and belongs to user's merchant
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.merchant_id == current_user.merchant_id
+    ).first()
+    
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    images = db.query(ProductImage).filter(
+        ProductImage.product_id == product_id
+    ).order_by(ProductImage.ordering).all()
+    
+    return [{
+        "id": str(img.id),
+        "image_url": img.image_url,
+        "is_primary": img.is_primary,
+        "ordering": img.ordering,
+        "storage_type": img.storage_type,
+        "dominant_color": img.dominant_color,
+        "color_palette": img.color_palette,
+        "width_px": img.width_px,
+        "height_px": img.height_px,
+        "created_at": img.created_at.isoformat() if img.created_at else None
+    } for img in images]
+
+@api_router.put("/dealer/products/{product_id}/images/{image_id}/primary")
+async def set_primary_image(
+    product_id: str,
+    image_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Set an image as the primary image for a product"""
+    
+    # Verify product and image
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.merchant_id == current_user.merchant_id
+    ).first()
+    
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    image = db.query(ProductImage).filter(
+        ProductImage.id == image_id,
+        ProductImage.product_id == product_id
+    ).first()
+    
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    # Set as primary (trigger will unset others)
+    image.is_primary = True
+    db.commit()
+    
+    # Log activity
+    log_product_activity(
+        db=db,
+        product_id=product_id,
+        user_id=current_user.id,
+        merchant_id=current_user.merchant_id,
+        activity_type='primary_image_changed',
+        description=f"Set primary image",
+        changes={"image_id": str(image_id)}
+    )
+    
+    return {"message": "Primary image updated successfully"}
+
+@api_router.delete("/dealer/products/{product_id}/images/{image_id}")
+async def delete_product_image(
+    product_id: str,
+    image_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a product image"""
+    
+    # Verify product and image
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.merchant_id == current_user.merchant_id
+    ).first()
+    
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    image = db.query(ProductImage).filter(
+        ProductImage.id == image_id,
+        ProductImage.product_id == product_id
+    ).first()
+    
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    # Delete from Cloudinary if it's a Cloudinary image
+    if image.storage_type == 'cloudinary' and image.cloudinary_public_id:
+        try:
+            cloudinary.uploader.destroy(image.cloudinary_public_id)
+        except Exception as e:
+            logging.error(f"Failed to delete from Cloudinary: {str(e)}")
+    
+    # Delete from database
+    db.delete(image)
+    db.commit()
+    
+    # Log activity
+    log_product_activity(
+        db=db,
+        product_id=product_id,
+        user_id=current_user.id,
+        merchant_id=current_user.merchant_id,
+        activity_type='image_deleted',
+        description=f"Deleted image",
+        changes={"image_id": str(image_id)}
+    )
+    
+    return {"message": "Image deleted successfully"}
+
+@api_router.put("/dealer/products/{product_id}/images/reorder")
+async def reorder_product_images(
+    product_id: str,
+    image_ids: List[str],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Reorder product images. Pass array of image IDs in desired order."""
+    
+    # Verify product
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.merchant_id == current_user.merchant_id
+    ).first()
+    
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Update ordering
+    for idx, image_id in enumerate(image_ids):
+        db.query(ProductImage).filter(
+            ProductImage.id == image_id,
+            ProductImage.product_id == product_id
+        ).update({"ordering": idx})
+    
+    db.commit()
+    
+    return {"message": "Images reordered successfully"}
