@@ -115,10 +115,13 @@ const AdminReferenceData = () => {
       const response = await api.get(endpoint, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setItems(response.data);
+      // Ensure response.data is always an array
+      const itemsData = Array.isArray(response.data) ? response.data : [];
+      setItems(itemsData);
     } catch (error) {
       console.error('Failed to fetch items:', error);
       toast.error('Failed to load items');
+      setItems([]); // Set empty array on error
     }
   };
 
