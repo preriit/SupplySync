@@ -15,6 +15,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminMerchants from './pages/AdminMerchants';
 import AdminReferenceData from './pages/AdminReferenceData';
+import AdminAnalytics from './pages/AdminAnalytics';
 
 import './App.css';
 
@@ -85,6 +86,14 @@ function App() {
           element={
             <AdminProtectedRoute>
               <AdminReferenceData />
+            </AdminProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin/analytics" 
+          element={
+            <AdminProtectedRoute>
+              <AdminAnalytics />
             </AdminProtectedRoute>
           } 
         />
