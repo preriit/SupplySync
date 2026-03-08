@@ -29,9 +29,18 @@ const DealerDashboard = () => {
   const fetchDashboardStats = async () => {
     try {
       const response = await api.get('/dealer/dashboard/stats');
-      setStats(response.data);
+      // Ensure all fields have default values
+      setStats({
+        total_products: response.data?.total_products || 0,
+        active_products: response.data?.active_products || 0,
+        low_stock_items: response.data?.low_stock_items || 0,
+        out_of_stock_items: response.data?.out_of_stock_items || 0,
+        inventory_value: response.data?.inventory_value || 0,
+        recent_activity: response.data?.recent_activity || []
+      });
     } catch (error) {
       console.error('Failed to fetch dashboard stats:', error);
+      // Keep default stats on error
     } finally {
       setLoading(false);
     }
@@ -130,7 +139,7 @@ const DealerDashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {stats.recent_activity.length === 0 ? (
+              {!stats.recent_activity || stats.recent_activity.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <p>{t('dashboard:no_activity')}</p>
                 </div>
