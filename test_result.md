@@ -185,38 +185,56 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Product Transaction UI - Add quantity"
-    - "Product Transaction UI - Subtract quantity"
-    - "Negative quantity confirmation"
-    - "Transaction History viewing"
+    - "Admin Dashboard - Fix crash on refresh/direct navigation"
+    - "Dealer Dashboard - Verify no crash on first load"
+    - "Full Admin Portal Testing - All features"
   stuck_tasks: []
   test_all: true
   test_priority: "high_first"
 
 agent_communication:
   - agent: "main"
+    iteration: "fork_1"
     message: |
-      Implemented complete quantity transaction feature (P0 priority):
+      Fixed critical P0 dashboard crash bugs:
       
-      Backend:
-      - Fixed PostgreSQL connection (was not running, installed and configured)
-      - Created product_transactions table with proper schema
-      - Implemented POST and GET endpoints for transactions
-      - Validated: integer only, positive numbers, handles negative final quantity
-      - Manually tested with curl - all working
+      Problem: 
+      - Admin Dashboard crashed on refresh with TypeError (stats.total_users undefined)
+      - Root cause: React race condition - component rendered before API call completed
+      - Previous agent added backend stats but didn't fix frontend state management
       
-      Frontend:
-      - Added +/- buttons with custom input field on ProductsList
-      - Integer validation implemented
-      - Negative quantity confirmation dialog
-      - Transaction history dialog with full transaction log
-      - Toast notifications for success/error
+      Solution Implemented:
+      - AdminDashboard.js: Initialize stats state with proper default object structure (9 fields)
+      - Added safe destructuring with fallbacks in fetchStats (response.data?.field || 0)
+      - Removed conditional statCards creation (no longer needed with default state)
+      - DealerDashboard.js: Already had correct pattern, verified it's safe
       
-      Needs Testing:
-      - Full E2E testing via playwright
-      - Test add transaction
-      - Test subtract transaction (positive result)
-      - Test subtract transaction (negative result) + confirmation
-      - Test transaction history view
-      - Test integer validation
-      - Test UI updates after transactions
+      Pattern Applied:
+      - useState with default structure instead of null
+      - Optional chaining + fallback values in API response handler
+      - Keep default stats on error
+      
+      Files Changed:
+      - /app/frontend/src/pages/AdminDashboard.js (Lines 8-49, 51-115)
+      
+      Testing Needed:
+      1. Admin Dashboard:
+         - Direct navigation to /admin/dashboard
+         - Hard refresh on /admin/dashboard
+         - Navigate away and back
+         - Test with slow network
+      2. Dealer Dashboard:
+         - First load after signup
+         - Direct navigation to /dashboard
+         - Hard refresh
+      3. Full Admin Portal:
+         - Users Management (CRUD operations)
+         - Merchants Management (view, update subscriptions)
+         - Reference Data (Sizes, Make Types, Body Types, Application Types)
+         - Analytics (Coming Soon page)
+         - All navigation flows
+         - Token expiry handling
+      
+      Deployment Note:
+      - User will push to GitHub, pull on EC2, run yarn build, restart services
+      - Live testing on http://35.154.162.162
