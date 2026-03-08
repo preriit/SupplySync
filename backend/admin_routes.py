@@ -12,7 +12,7 @@ from typing import List, Optional
 import logging
 
 from database import get_db
-from models import User, Merchant, Product, SubCategory, Category
+from models import User, Merchant, Product, SubCategory, Category, BodyType, MakeType, SurfaceType, ApplicationType, Size, Quality
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
 
 # Create admin router
@@ -365,8 +365,6 @@ async def update_merchant_status(
 # =====================================================
 # Reference Data Management Routes
 # =====================================================
-
-from models import MakeType, ApplicationType, SurfaceType, BodyType, Quality, Size
 
 class ReferenceDataItem(BaseModel):
     name: str
