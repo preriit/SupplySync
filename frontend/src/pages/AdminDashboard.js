@@ -42,11 +42,32 @@ const AdminDashboard = () => {
       description: 'Dealer businesses'
     },
     {
-      title: 'Total Products',
-      value: stats.total_products,
+      title: 'Body Types',
+      value: stats.body_types,
       icon: Package,
       color: 'bg-purple-500',
-      description: 'Inventory items'
+      description: 'Active body types'
+    },
+    {
+      title: 'Make Types',
+      value: stats.make_types,
+      icon: Package,
+      color: 'bg-indigo-500',
+      description: 'Active make types'
+    },
+    {
+      title: 'Application Types',
+      value: stats.application_types,
+      icon: Package,
+      color: 'bg-pink-500',
+      description: 'Active application types'
+    },
+    {
+      title: 'Sizes',
+      value: stats.sizes,
+      icon: Package,
+      color: 'bg-cyan-500',
+      description: 'Active size configurations'
     },
     {
       title: 'Active Subscriptions',
