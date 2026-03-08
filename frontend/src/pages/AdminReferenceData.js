@@ -166,6 +166,7 @@ const AdminReferenceData = () => {
   };
 
   const createSize = async () => {
+    // Check if all fields are filled
     if (!sizeForm.widthInches || !sizeForm.widthMm || !sizeForm.heightInches || 
         !sizeForm.heightMm || !sizeForm.packagingPerBox || 
         !sizeForm.applicationTypeId || !sizeForm.bodyTypeId) {
@@ -173,31 +174,49 @@ const AdminReferenceData = () => {
       return;
     }
 
-    // Validate all numeric fields are positive
-    const widthInches = parseInt(sizeForm.widthInches);
-    const widthMm = parseInt(sizeForm.widthMm);
-    const heightInches = parseInt(sizeForm.heightInches);
-    const heightMm = parseInt(sizeForm.heightMm);
-    const packagingPerBox = parseInt(sizeForm.packagingPerBox);
+    // Parse numeric values
+    const widthInches = Number(sizeForm.widthInches);
+    const widthMm = Number(sizeForm.widthMm);
+    const heightInches = Number(sizeForm.heightInches);
+    const heightMm = Number(sizeForm.heightMm);
+    const packagingPerBox = Number(sizeForm.packagingPerBox);
 
-    if (widthInches <= 0 || widthMm <= 0 || heightInches <= 0 || heightMm <= 0) {
-      toast.error('Width and height values must be positive numbers');
+    // Validate numeric values
+    if (isNaN(widthInches) || isNaN(widthMm) || isNaN(heightInches) || isNaN(heightMm) || isNaN(packagingPerBox)) {
+      toast.error('Please enter valid numbers for all fields');
       return;
     }
 
+    // Check for positive values
+    if (widthInches <= 0) {
+      toast.error('Width (inches) must be greater than 0');
+      return;
+    }
+    if (widthMm <= 0) {
+      toast.error('Width (mm) must be greater than 0');
+      return;
+    }
+    if (heightInches <= 0) {
+      toast.error('Height (inches) must be greater than 0');
+      return;
+    }
+    if (heightMm <= 0) {
+      toast.error('Height (mm) must be greater than 0');
+      return;
+    }
     if (packagingPerBox <= 0) {
-      toast.error('Number of pieces per box must be a positive number');
+      toast.error('Number of pieces per box must be greater than 0');
       return;
     }
 
     try {
       const token = localStorage.getItem('admin_token');
       await api.post('/admin/reference-data/sizes/create', {
-        width_inches: widthInches,
-        width_mm: widthMm,
-        height_inches: heightInches,
-        height_mm: heightMm,
-        default_packaging_per_box: packagingPerBox,
+        width_inches: Math.floor(widthInches),
+        width_mm: Math.floor(widthMm),
+        height_inches: Math.floor(heightInches),
+        height_mm: Math.floor(heightMm),
+        default_packaging_per_box: Math.floor(packagingPerBox),
         application_type_id: sizeForm.applicationTypeId,
         body_type_id: sizeForm.bodyTypeId
       }, {
