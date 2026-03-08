@@ -24,10 +24,13 @@ const AdminUsers = () => {
       const response = await api.get('/admin/users', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setUsers(response.data);
+      // Ensure response.data is always an array
+      const usersData = Array.isArray(response.data) ? response.data : [];
+      setUsers(usersData);
     } catch (error) {
       console.error('Failed to fetch users:', error);
       toast.error('Failed to load users');
+      setUsers([]); // Set empty array on error
     } finally {
       setLoading(false);
     }

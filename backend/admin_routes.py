@@ -571,14 +571,31 @@ async def create_size(
     name_inches = f"{size_data.width_inches} x {size_data.height_inches}"
     name_mm = f"{size_data.width_mm} x {size_data.height_mm}"
     
-    # Check if size with same name already exists
-    existing = db.query(Size).filter(
-        Size.name == name_inches,
-        Size.is_active == True
-    ).first()
+    # Check if size with same name already exists (active or inactive)
+    existing = db.query(Size).filter(Size.name == name_inches).first()
     
     if existing:
-        raise HTTPException(status_code=400, detail=f"Size {name_inches} already exists and is active")
+        if existing.is_active:
+            raise HTTPException(status_code=400, detail=f"Size '{name_inches}' already exists and is active")
+        else:
+            # Reactivate the existing inactive size
+            existing.is_active = True
+            existing.name_mm = name_mm
+            existing.width_inches = size_data.width_inches
+            existing.width_mm = size_data.width_mm
+            existing.height_inches = size_data.height_inches
+            existing.height_mm = size_data.height_mm
+            existing.default_packaging_per_box = size_data.default_packaging_per_box
+            existing.application_type_id = size_data.application_type_id
+            existing.body_type_id = size_data.body_type_id
+            db.commit()
+            db.refresh(existing)
+            return {
+                "message": f"Size '{name_inches}' reactivated successfully",
+                "id": str(existing.id),
+                "name_inches": name_inches,
+                "name_mm": name_mm
+            }
     
     # Create new size
     new_size = Size(
@@ -594,16 +611,23 @@ async def create_size(
         is_active=True
     )
     
-    db.add(new_size)
-    db.commit()
-    db.refresh(new_size)
-    
-    return {
-        "message": f"Size {name_inches} created successfully",
-        "id": str(new_size.id),
-        "name_inches": name_inches,
-        "name_mm": name_mm
-    }
+    try:
+        db.add(new_size)
+        db.commit()
+        db.refresh(new_size)
+        
+        return {
+            "message": f"Size '{name_inches}' created successfully",
+            "id": str(new_size.id),
+            "name_inches": name_inches,
+            "name_mm": name_mm
+        }
+    except Exception as e:
+        db.rollback()
+        # Handle any database constraint violations
+        if "duplicate key" in str(e).lower() or "unique constraint" in str(e).lower():
+            raise HTTPException(status_code=400, detail=f"Size '{name_inches}' already exists in the database")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @admin_router.get("/reference-data/sizes/detailed")
 async def get_sizes_detailed(
