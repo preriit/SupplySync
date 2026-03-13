@@ -112,7 +112,7 @@ const DealerDashboard = () => {
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Button
-                  onClick={() => navigate('/dealer/inventory/add')}
+                  onClick={() => navigate('/dealer/inventory')}
                   className="bg-orange hover:bg-orange-dark h-24 flex flex-col items-center justify-center space-y-2"
                 >
                   <Plus className="h-8 w-8" />
@@ -210,7 +210,7 @@ const DealerDashboard = () => {
                 </div>
 
                 <Button
-                  onClick={() => navigate('/dealer/inventory/add')}
+                  onClick={() => navigate('/dealer/inventory')}
                   className="w-full bg-orange hover:bg-orange-dark mt-4"
                 >
                   <Plus className="mr-2 h-5 w-5" />
