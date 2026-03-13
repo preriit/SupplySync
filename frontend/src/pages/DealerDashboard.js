@@ -29,9 +29,18 @@ const DealerDashboard = () => {
   const fetchDashboardStats = async () => {
     try {
       const response = await api.get('/dealer/dashboard/stats');
-      setStats(response.data);
+      // Ensure all fields have default values
+      setStats({
+        total_products: response.data?.total_products || 0,
+        active_products: response.data?.active_products || 0,
+        low_stock_items: response.data?.low_stock_items || 0,
+        out_of_stock_items: response.data?.out_of_stock_items || 0,
+        inventory_value: response.data?.inventory_value || 0,
+        recent_activity: response.data?.recent_activity || []
+      });
     } catch (error) {
       console.error('Failed to fetch dashboard stats:', error);
+      // Keep default stats on error
     } finally {
       setLoading(false);
     }
@@ -103,7 +112,7 @@ const DealerDashboard = () => {
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Button
-                  onClick={() => navigate('/dealer/inventory/add')}
+                  onClick={() => navigate('/dealer/inventory')}
                   className="bg-orange hover:bg-orange-dark h-24 flex flex-col items-center justify-center space-y-2"
                 >
                   <Plus className="h-8 w-8" />
@@ -130,7 +139,7 @@ const DealerDashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {stats.recent_activity.length === 0 ? (
+              {!stats.recent_activity || stats.recent_activity.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <p>{t('dashboard:no_activity')}</p>
                 </div>
@@ -201,7 +210,7 @@ const DealerDashboard = () => {
                 </div>
 
                 <Button
-                  onClick={() => navigate('/dealer/inventory/add')}
+                  onClick={() => navigate('/dealer/inventory')}
                   className="w-full bg-orange hover:bg-orange-dark mt-4"
                 >
                   <Plus className="mr-2 h-5 w-5" />

@@ -24,7 +24,14 @@ import api from '../utils/api';
 import toast from 'react-hot-toast';
 
 const AdminReferenceData = () => {
-  const [summary, setSummary] = useState(null);
+  const [summary, setSummary] = useState({
+    body_types: 0,
+    make_types: 0,
+    surface_types: 0,
+    application_types: 0,
+    quality_types: 0,
+    sizes: 0
+  });
   const [selectedType, setSelectedType] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -72,7 +79,14 @@ const AdminReferenceData = () => {
       const response = await api.get('/admin/reference-data/summary', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setSummary(response.data);
+      setSummary({
+        body_types: response.data?.body_types || 0,
+        make_types: response.data?.make_types || 0,
+        surface_types: response.data?.surface_types || 0,
+        application_types: response.data?.application_types || 0,
+        quality_types: response.data?.quality_types || 0,
+        sizes: response.data?.sizes || 0
+      });
     } catch (error) {
       console.error('Failed to fetch summary:', error);
       toast.error('Failed to load reference data summary');

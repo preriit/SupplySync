@@ -12,7 +12,7 @@ from typing import List, Optional
 import logging
 
 from database import get_db
-from models import User, Merchant, Product, SubCategory, Category
+from models import User, Merchant, Product, SubCategory, Category, BodyType, MakeType, SurfaceType, ApplicationType, Size, Quality
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
 
 # Create admin router
@@ -68,6 +68,10 @@ class DashboardStatsResponse(BaseModel):
     total_users: int
     total_merchants: int
     total_products: int
+    body_types: int
+    make_types: int
+    application_types: int
+    sizes: int
     active_subscriptions: int
     trial_subscriptions: int
     expired_subscriptions: int
@@ -153,6 +157,12 @@ async def get_admin_dashboard_stats(
     # Total products
     total_products = db.query(Product).count()
     
+    # Reference data counts (only active items)
+    body_types_count = db.query(BodyType).filter(BodyType.is_active == True).count()
+    make_types_count = db.query(MakeType).filter(MakeType.is_active == True).count()
+    application_types_count = db.query(ApplicationType).filter(ApplicationType.is_active == True).count()
+    sizes_count = db.query(Size).filter(Size.is_active == True).count()
+    
     # Subscription stats
     active_subs = db.query(Merchant).filter(
         and_(
@@ -187,6 +197,10 @@ async def get_admin_dashboard_stats(
         "total_users": total_users,
         "total_merchants": total_merchants,
         "total_products": total_products,
+        "body_types": body_types_count,
+        "make_types": make_types_count,
+        "application_types": application_types_count,
+        "sizes": sizes_count,
         "active_subscriptions": active_subs,
         "trial_subscriptions": trial_subs,
         "expired_subscriptions": expired_subs,
@@ -351,8 +365,6 @@ async def update_merchant_status(
 # =====================================================
 # Reference Data Management Routes
 # =====================================================
-
-from models import MakeType, ApplicationType, SurfaceType, BodyType, Quality, Size
 
 class ReferenceDataItem(BaseModel):
     name: str
