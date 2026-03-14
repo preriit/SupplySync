@@ -75,10 +75,7 @@
       "react": "$react",
       "react-dom": "$react-dom"
     },
-    "react-scripts": {
-      "react": "$react",
-      "react-dom": "$react-dom"
-    }
+    "react-scripts": "5.0.1"
   },
   "browserslist": {
     "production": [
