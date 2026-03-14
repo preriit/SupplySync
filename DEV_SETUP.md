@@ -92,7 +92,7 @@ In a **new** terminal:
 
    Set:
 
-   - `REACT_APP_BACKEND_URL=http://localhost:8001`  
+   - `VITE_BACKEND_URL=http://localhost:8001`  
      (no trailing slash)
 
 2. Install and start:
@@ -130,7 +130,7 @@ In a **new** terminal:
 | Backend API | http://localhost:8001 |
 | API docs   | http://localhost:8001/docs |
 | Backend (run) | `cd backend && .\.venv\Scripts\activate && uvicorn server:app --host 0.0.0.0 --port 8001 --reload` |
-| Frontend (run) | `cd frontend && npm start` |
+| Frontend (run) | `cd frontend && npm start` (Vite dev server) |
 
 ---
 
@@ -139,5 +139,5 @@ In a **new** terminal:
 - **"psql not found"** – Use full path to `psql.exe` (see step 1) or add PostgreSQL `bin` to PATH.
 - **Backend: "DATABASE_URL" or "JWT_SECRET_KEY"** – Ensure `backend\.env` exists and has those set; restart uvicorn.
 - **Backend: Cloudinary errors on image upload** – Add valid `CLOUDINARY_*` vars in `backend\.env` or ignore until you need uploads.
-- **Frontend: 401 or CORS** – Ensure `REACT_APP_BACKEND_URL` in `frontend\.env` is exactly `http://localhost:8001` and restart `npm start`.
+- **Frontend: 401 or CORS** – Ensure `VITE_BACKEND_URL` in `frontend\.env` is exactly `http://localhost:8001` and restart `npm start`.
 - **Port already in use** – Change backend port in `uvicorn` (e.g. `--port 8002`) and set `REACT_APP_BACKEND_URL` to that port.
