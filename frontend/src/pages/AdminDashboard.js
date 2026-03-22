@@ -5,7 +5,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import api from '../utils/api';
 
 const AdminDashboard = () => {
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState({
+    total_users: 0,
+    total_merchants: 0,
+    body_types: 0,
+    make_types: 0,
+    application_types: 0,
+    sizes: 0,
+    active_subscriptions: 0,
+    trial_subscriptions: 0,
+    suspended_users: 0
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -18,15 +28,27 @@ const AdminDashboard = () => {
       const response = await api.get('/admin/dashboard/stats', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setStats(response.data);
+      // Ensure all fields have default values
+      setStats({
+        total_users: response.data?.total_users || 0,
+        total_merchants: response.data?.total_merchants || 0,
+        body_types: response.data?.body_types || 0,
+        make_types: response.data?.make_types || 0,
+        application_types: response.data?.application_types || 0,
+        sizes: response.data?.sizes || 0,
+        active_subscriptions: response.data?.active_subscriptions || 0,
+        trial_subscriptions: response.data?.trial_subscriptions || 0,
+        suspended_users: response.data?.suspended_users || 0
+      });
     } catch (error) {
       console.error('Failed to fetch stats:', error);
+      // Keep default stats on error
     } finally {
       setLoading(false);
     }
   };
 
-  const statCards = stats ? [
+  const statCards = [
     {
       title: 'Total Users',
       value: stats.total_users,
@@ -42,11 +64,32 @@ const AdminDashboard = () => {
       description: 'Dealer businesses'
     },
     {
-      title: 'Total Products',
-      value: stats.total_products,
+      title: 'Body Types',
+      value: stats.body_types,
       icon: Package,
       color: 'bg-purple-500',
-      description: 'Inventory items'
+      description: 'Active body types'
+    },
+    {
+      title: 'Make Types',
+      value: stats.make_types,
+      icon: Package,
+      color: 'bg-indigo-500',
+      description: 'Active make types'
+    },
+    {
+      title: 'Application Types',
+      value: stats.application_types,
+      icon: Package,
+      color: 'bg-pink-500',
+      description: 'Active application types'
+    },
+    {
+      title: 'Sizes',
+      value: stats.sizes,
+      icon: Package,
+      color: 'bg-cyan-500',
+      description: 'Active size configurations'
     },
     {
       title: 'Active Subscriptions',
@@ -69,7 +112,7 @@ const AdminDashboard = () => {
       color: 'bg-red-500',
       description: 'Inactive accounts'
     },
-  ] : [];
+  ];
 
   return (
     <AdminLayout>

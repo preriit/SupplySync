@@ -31,10 +31,13 @@ const AdminMerchants = () => {
       const response = await api.get('/admin/merchants', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setMerchants(response.data);
+      // Ensure response.data is always an array
+      const merchantsData = Array.isArray(response.data) ? response.data : [];
+      setMerchants(merchantsData);
     } catch (error) {
       console.error('Failed to fetch merchants:', error);
       toast.error('Failed to load merchants');
+      setMerchants([]); // Set empty array on error
     } finally {
       setLoading(false);
     }

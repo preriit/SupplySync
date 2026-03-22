@@ -24,7 +24,14 @@ import api from '../utils/api';
 import toast from 'react-hot-toast';
 
 const AdminReferenceData = () => {
-  const [summary, setSummary] = useState(null);
+  const [summary, setSummary] = useState({
+    body_types: 0,
+    make_types: 0,
+    surface_types: 0,
+    application_types: 0,
+    quality_types: 0,
+    sizes: 0
+  });
   const [selectedType, setSelectedType] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -127,6 +134,7 @@ const AdminReferenceData = () => {
     } catch (error) {
       console.error('Failed to fetch items:', error);
       toast.error('Failed to load items');
+      setItems([]); // Set empty array on error
     }
   };
 
@@ -172,6 +180,7 @@ const AdminReferenceData = () => {
   };
 
   const createSize = async () => {
+    // Check if all fields are filled
     if (!sizeForm.widthInches || !sizeForm.widthMm || !sizeForm.heightInches || 
         !sizeForm.heightMm || !sizeForm.packagingPerBox || 
         !sizeForm.applicationTypeId || !sizeForm.bodyTypeId) {
@@ -179,14 +188,49 @@ const AdminReferenceData = () => {
       return;
     }
 
+    // Parse numeric values
+    const widthInches = Number(sizeForm.widthInches);
+    const widthMm = Number(sizeForm.widthMm);
+    const heightInches = Number(sizeForm.heightInches);
+    const heightMm = Number(sizeForm.heightMm);
+    const packagingPerBox = Number(sizeForm.packagingPerBox);
+
+    // Validate numeric values
+    if (isNaN(widthInches) || isNaN(widthMm) || isNaN(heightInches) || isNaN(heightMm) || isNaN(packagingPerBox)) {
+      toast.error('Please enter valid numbers for all fields');
+      return;
+    }
+
+    // Check for positive values
+    if (widthInches <= 0) {
+      toast.error('Width (inches) must be greater than 0');
+      return;
+    }
+    if (widthMm <= 0) {
+      toast.error('Width (mm) must be greater than 0');
+      return;
+    }
+    if (heightInches <= 0) {
+      toast.error('Height (inches) must be greater than 0');
+      return;
+    }
+    if (heightMm <= 0) {
+      toast.error('Height (mm) must be greater than 0');
+      return;
+    }
+    if (packagingPerBox <= 0) {
+      toast.error('Number of pieces per box must be greater than 0');
+      return;
+    }
+
     try {
       const token = localStorage.getItem('admin_token');
       await api.post('/admin/reference-data/sizes/create', {
-        width_inches: parseInt(sizeForm.widthInches),
-        width_mm: parseInt(sizeForm.widthMm),
-        height_inches: parseInt(sizeForm.heightInches),
-        height_mm: parseInt(sizeForm.heightMm),
-        default_packaging_per_box: parseInt(sizeForm.packagingPerBox),
+        width_inches: Math.floor(widthInches),
+        width_mm: Math.floor(widthMm),
+        height_inches: Math.floor(heightInches),
+        height_mm: Math.floor(heightMm),
+        default_packaging_per_box: Math.floor(packagingPerBox),
         application_type_id: sizeForm.applicationTypeId,
         body_type_id: sizeForm.bodyTypeId
       }, {
@@ -309,13 +353,13 @@ const AdminReferenceData = () => {
                             <div className="grid grid-cols-2 gap-4">
                               <div className="space-y-2">
                                 <Label className="text-slate-200">Width (Inches) *</Label>
-                                <Input type="number" placeholder="24" value={sizeForm.widthInches}
+                                <Input type="number" min="1" placeholder="24" value={sizeForm.widthInches}
                                   onChange={(e) => setSizeForm({...sizeForm, widthInches: e.target.value})}
                                   className="bg-slate-900 border-slate-600 text-white" />
                               </div>
                               <div className="space-y-2">
                                 <Label className="text-slate-200">Width (MM) *</Label>
-                                <Input type="number" placeholder="600" value={sizeForm.widthMm}
+                                <Input type="number" min="1" placeholder="600" value={sizeForm.widthMm}
                                   onChange={(e) => setSizeForm({...sizeForm, widthMm: e.target.value})}
                                   className="bg-slate-900 border-slate-600 text-white" />
                               </div>
@@ -324,13 +368,13 @@ const AdminReferenceData = () => {
                             <div className="grid grid-cols-2 gap-4">
                               <div className="space-y-2">
                                 <Label className="text-slate-200">Height (Inches) *</Label>
-                                <Input type="number" placeholder="48" value={sizeForm.heightInches}
+                                <Input type="number" min="1" placeholder="48" value={sizeForm.heightInches}
                                   onChange={(e) => setSizeForm({...sizeForm, heightInches: e.target.value})}
                                   className="bg-slate-900 border-slate-600 text-white" />
                               </div>
                               <div className="space-y-2">
                                 <Label className="text-slate-200">Height (MM) *</Label>
-                                <Input type="number" placeholder="1200" value={sizeForm.heightMm}
+                                <Input type="number" min="1" placeholder="1200" value={sizeForm.heightMm}
                                   onChange={(e) => setSizeForm({...sizeForm, heightMm: e.target.value})}
                                   className="bg-slate-900 border-slate-600 text-white" />
                               </div>
@@ -338,9 +382,10 @@ const AdminReferenceData = () => {
                             
                             <div className="space-y-2">
                               <Label className="text-slate-200">Default Packaging Per Box *</Label>
-                              <Input type="number" placeholder="4" value={sizeForm.packagingPerBox}
+                              <Input type="number" min="1" placeholder="4" value={sizeForm.packagingPerBox}
                                 onChange={(e) => setSizeForm({...sizeForm, packagingPerBox: e.target.value})}
                                 className="bg-slate-900 border-slate-600 text-white" />
+                              <p className="text-xs text-slate-400">Must be a positive number</p>
                             </div>
                             
                             <div className="space-y-2">
