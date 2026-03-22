@@ -1,0 +1,14 @@
+# Minimal requirements for running SupplySync backend in Docker (no Emergent/add-on deps)
+fastapi==0.110.1
+uvicorn==0.25.0
+sqlalchemy==2.0.48
+psycopg2-binary==2.9.11
+python-dotenv==1.2.1
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+pydantic==2.12.5
+email-validator==2.3.0
+cloudinary==1.44.1
+colorthief==0.2.1
+pillow==12.1.1
+python-multipart==0.0.22

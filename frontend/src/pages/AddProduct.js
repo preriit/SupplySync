@@ -30,7 +30,7 @@ const AddProduct = () => {
     body_type_id: '',
     quality_id: '',
     current_quantity: '',
-    packing_per_box: '10'
+    packing_per_box: ''
   });
   
   const [loading, setLoading] = useState(false);
@@ -40,7 +40,23 @@ const AddProduct = () => {
     fetchData();
   }, [subcategoryId]);
 
+  useEffect(() => {
+    if (!subcategory) return;
+    setFormData((prev) => ({
+      ...prev,
+      // Prefer API defaults (includes size / make-type fallbacks from backend)
+      application_type_id:
+        subcategory.application_type_id ?? prev.application_type_id ?? '',
+      body_type_id: subcategory.body_type_id ?? prev.body_type_id ?? '',
+      packing_per_box:
+        subcategory.default_packing_per_box != null && subcategory.default_packing_per_box !== ''
+          ? String(subcategory.default_packing_per_box)
+          : prev.packing_per_box || '0',
+    }));
+  }, [subcategory]);
+
   const fetchData = async () => {
+    if (!subcategoryId) return;
     try {
       const [subcatRes, surfaceRes, appRes, bodyRes, qualityRes] = await Promise.all([
         api.get(`/dealer/subcategories/${subcategoryId}/products`),
@@ -51,10 +67,10 @@ const AddProduct = () => {
       ]);
       
       setSubcategory(subcatRes.data.subcategory);
-      setSurfaceTypes(surfaceRes.data.surface_types);
-      setApplicationTypes(appRes.data.application_types);
-      setBodyTypes(bodyRes.data.body_types);
-      setQualities(qualityRes.data.qualities);
+      setSurfaceTypes(surfaceRes.data.surface_types ?? []);
+      setApplicationTypes(appRes.data.application_types ?? []);
+      setBodyTypes(bodyRes.data.body_types ?? []);
+      setQualities(qualityRes.data.qualities ?? []);
     } catch (error) {
       console.error('Failed to fetch data:', error);
     }
@@ -95,14 +111,36 @@ const AddProduct = () => {
       name: '',
       sku: '',
       surface_type_id: '',
-      application_type_id: '',
-      body_type_id: '',
+      application_type_id: subcategory?.application_type_id || '',
+      body_type_id: subcategory?.body_type_id || '',
       quality_id: '',
       current_quantity: '',
-      packing_per_box: '10'
+      packing_per_box:
+        subcategory?.default_packing_per_box != null
+          ? String(subcategory.default_packing_per_box)
+          : '0',
     });
     setMessage(null);
   };
+
+  if (!subcategoryId) {
+    return (
+      <div className="min-h-screen bg-grey-50">
+        <DealerNav />
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Missing tile category. Open Inventory, select a category, then use Add Product from that list.
+            </AlertDescription>
+          </Alert>
+          <Button onClick={() => navigate('/dealer/inventory')} className="bg-orange">
+            Go to Inventory
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-grey-50">
@@ -127,7 +165,9 @@ const AddProduct = () => {
                 </div>
                 <div>
                   <p className="font-display font-bold text-slate">{subcategory.name}</p>
-                  <p className="text-sm text-slate-light">{subcategory.size_mm} • {subcategory.make_type}</p>
+                  <p className="text-sm text-slate-light">
+                    {subcategory.size_mm || subcategory.size_inches || subcategory.size || ''} • {subcategory.make_type || ''}
+                  </p>
                 </div>
               </div>
             </CardContent>

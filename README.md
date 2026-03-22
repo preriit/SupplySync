@@ -73,7 +73,9 @@ A modern B2B marketplace platform for tile and flooring dealers to manage invent
 /app/
 ├── backend/
 │   ├── server.py           # Main FastAPI application
-│   ├── models.py           # SQLAlchemy ORM models
+│   ├── models/             # SQLAlchemy ORM models (package)
+│   ├── routers/            # FastAPI APIRouter modules (reference, health; more can be split from server.py)
+│   ├── services/           # Shared business logic (e.g. tiles category)
 │   ├── database.py         # Database connection
 │   ├── auth.py             # JWT & password utilities
 │   ├── schema_v2.sql       # Database schema
@@ -114,11 +116,26 @@ A modern B2B marketplace platform for tile and flooring dealers to manage invent
 
 ## 🚀 Setup & Installation
 
-### Prerequisites
+### Option 1: Run with Docker (recommended — one command)
+
+If you have **Docker Desktop** installed:
+
+```bash
+docker-compose up --build
+```
+
+Then open **http://localhost:3000** (admin: http://localhost:3000/admin/login).  
+See **[RUN_WITH_DOCKER.md](RUN_WITH_DOCKER.md)** for details and importing your EC2 data.
+
+---
+
+### Option 2: Local setup (Python, Node, PostgreSQL)
+
+#### Prerequisites
 - Python 3.11+
 - Node.js 18+
 - PostgreSQL 15+
-- Yarn package manager
+- Yarn or npm
 
 ### Backend Setup
 
@@ -134,13 +151,17 @@ sudo -u postgres psql -c "CREATE DATABASE supplysync;"
 sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
 ```
 
-3. **Apply Database Schema**:
+3. **Apply Database Schema** (run in order):
 ```bash
-cd /app/backend
+cd backend
+# If using schema_v2 (recommended): run schema_v2 first, then seed/migrations
 sudo -u postgres psql -d supplysync -f init_db.sql
 sudo -u postgres psql -d supplysync -f schema_v2.sql
 sudo -u postgres psql -d supplysync -f seed_data.sql
 sudo -u postgres psql -d supplysync -f add_sizes_table.sql
+sudo -u postgres psql -d supplysync -f add_transactions_table.sql
+sudo -u postgres psql -d supplysync -f add_product_images_table.sql
+sudo -u postgres psql -d supplysync -f add_activity_log_table.sql
 ```
 
 4. **Install Python Dependencies**:
@@ -150,12 +171,19 @@ pip install -r requirements.txt
 
 5. **Configure Environment Variables**:
 
-Edit `/app/backend/.env`:
+Edit `backend/.env` (create from scratch; file is gitignored):
 ```env
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/supplysync
-SECRET_KEY=your-secret-key-here
+JWT_SECRET_KEY=your-secret-key-here
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=43200
+```
+
+Optional (for product image uploads):
+```env
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-api-key
+CLOUDINARY_API_SECRET=your-api-secret
 ```
 
 6. **Start Backend** (via Supervisor):
@@ -267,9 +295,10 @@ See [DATABASE.md](DATABASE.md) for full schema documentation.
 ### Backend (.env)
 ```env
 DATABASE_URL=postgresql://user:pass@host:port/dbname
-SECRET_KEY=your-secret-key
+JWT_SECRET_KEY=your-secret-key
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=43200
+# Optional for image uploads: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
 ```
 
 ### Frontend (.env)

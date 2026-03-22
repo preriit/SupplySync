@@ -153,11 +153,17 @@ The SupplySync database uses **PostgreSQL** with a normalized schema designed fo
 | category_id | UUID (FK) | Parent category |
 | name | VARCHAR(255) | Generated name (e.g., "12X12 DOUBLE CHARGE") |
 | size | VARCHAR(50) | Display size (e.g., "12x12") |
-| make_type_id | UUID (FK) | Tile make type |
+| size_id | UUID (FK, nullable) | Optional link to `sizes` (admin reference); legacy rows may be NULL |
+| make_type_id | UUID (FK, nullable) | Tile make type; optional when body type is set directly |
+| application_type_id | UUID (FK, nullable) | Default application type for products in this sub-category |
+| body_type_id | UUID (FK, nullable) | Default body type (from make type or chosen when no make type) |
 | height_inches | VARCHAR(10) | Height in inches |
 | width_inches | VARCHAR(10) | Width in inches |
 | height_mm | INT | Height in millimeters |
 | width_mm | INT | Width in millimeters |
+| default_packing_per_box | INT | Default pieces per box for products |
+| coverage_per_pc_sqm | DOUBLE | Area per tile (m²) = W×H mm / 1e6 |
+| coverage_per_pc_sqft | DOUBLE | Area per tile (ft²) = m² × 10.764 |
 | is_active | BOOLEAN | Availability status |
 | created_at | TIMESTAMP | Creation time |
 
@@ -169,6 +175,7 @@ The SupplySync database uses **PostgreSQL** with a normalized schema designed fo
 **Indexes:**
 - `idx_subcategories_category` on `category_id`
 - `idx_subcategories_make_type` on `make_type_id`
+- `idx_sub_categories_size_id` on `size_id`
 
 ---
 
@@ -189,6 +196,10 @@ The SupplySync database uses **PostgreSQL** with a normalized schema designed fo
 | quality_id | UUID (FK) | Quality grade |
 | current_quantity | INT | Stock on hand |
 | packing_per_box | INT | Pieces per box |
+| coverage_per_pc_sqm | DOUBLE | Per-tile m² (copied from sub-category at create) |
+| coverage_per_pc_sqft | DOUBLE | Per-tile ft² |
+| coverage_per_box_sqm | DOUBLE | Per box m² = per-tile × packing |
+| coverage_per_box_sqft | DOUBLE | Per box ft² = per-tile × packing |
 | primary_image_url | TEXT | Main product image |
 | is_active | BOOLEAN | Product status |
 | created_at | TIMESTAMP | Addition time |

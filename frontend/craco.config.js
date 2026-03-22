@@ -47,6 +47,11 @@ const webpackConfig = {
       '@': path.resolve(__dirname, 'src'),
     },
     configure: (webpackConfig) => {
+      // Disable TypeScript checker (project is JS-only). Avoids ajv/ajv-keywords
+      // version mismatch inside fork-ts-checker-webpack-plugin (formats undefined).
+      webpackConfig.plugins = (webpackConfig.plugins || []).filter(
+        (p) => p && p.constructor && p.constructor.name !== "ForkTsCheckerWebpackPlugin"
+      );
 
       // Add ignored patterns to reduce watched directories
         webpackConfig.watchOptions = {

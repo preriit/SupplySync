@@ -10,10 +10,13 @@ from pydantic import BaseModel, EmailStr
 from datetime import datetime, timezone
 from typing import List, Optional
 import logging
+import sys
 
 from database import get_db
 from models import User, Merchant, Product, SubCategory, Category
-from auth import get_password_hash, verify_password, create_access_token, get_current_user
+from auth import get_password_hash, verify_password, create_access_token, get_current_user, truncate_password_for_bcrypt
+
+logger = logging.getLogger(__name__)
 
 # Create admin router
 admin_router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -90,48 +93,87 @@ def get_current_admin(current_user: User = Depends(get_current_user)):
 # Admin Authentication Routes
 # =====================================================
 
+def _debug_log(msg: str) -> None:
+    """Print to stderr so it shows in the terminal where uvicorn runs."""
+    print(f"[admin/login] {msg}", file=sys.stderr, flush=True)
+    logger.debug(msg)
+
+
 @admin_router.post("/auth/login", response_model=AdminLoginResponse)
 async def admin_login(request: AdminLoginRequest, db: Session = Depends(get_db)):
     """Admin login endpoint - separate from dealer/subdealer login"""
-    
-    # Find admin user by username
-    admin_user = db.query(User).filter(
-        and_(
-            User.username == request.username,
-            User.user_type == 'admin'
-        )
-    ).first()
-    
-    if not admin_user or not verify_password(request.password, admin_user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid admin credentials"
-        )
-    
-    if not admin_user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin account is inactive"
-        )
-    
-    # Update last login
-    admin_user.last_login = datetime.now(timezone.utc)
-    db.commit()
-    
-    # Create access token
-    access_token = create_access_token(data={"sub": str(admin_user.id)})
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "admin": {
-            "id": str(admin_user.id),
-            "username": admin_user.username,
-            "email": admin_user.email,
-            "role": admin_user.role,
-            "user_type": admin_user.user_type
+    try:
+        _debug_log(f"Attempt: username={request.username!r}")
+
+        # Find admin user by username
+        admin_user = db.query(User).filter(
+            and_(
+                User.username == request.username,
+                User.user_type == 'admin'
+            )
+        ).first()
+
+        if not admin_user:
+            _debug_log("401 reason: no admin user found for this username")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid admin credentials"
+            )
+
+        _debug_log(f"Admin user found: id={admin_user.id}")
+
+        raw_password = getattr(request, "password", None) or ""
+        password = truncate_password_for_bcrypt(raw_password if isinstance(raw_password, str) else str(raw_password))
+        password_ok = verify_password(password, admin_user.password_hash)
+
+        if not password_ok:
+            _debug_log("401 reason: password verification failed (hash mismatch)")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid admin credentials"
+            )
+
+        if not admin_user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin account is inactive"
+            )
+
+        # Update last login
+        admin_user.last_login = datetime.now(timezone.utc)
+        db.commit()
+
+        # Create access token
+        access_token = create_access_token(data={"sub": str(admin_user.id)})
+        _debug_log("Login success")
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "admin": {
+                "id": str(admin_user.id),
+                "username": admin_user.username,
+                "email": admin_user.email or "",
+                "role": admin_user.role or "",
+                "user_type": admin_user.user_type
+            }
         }
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        _debug_log(f"Exception: {type(e).__name__}: {e}")
+        err_msg = str(e).lower()
+        if "72 bytes" in err_msg or ("truncate" in err_msg and "password" in err_msg):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid admin credentials"
+            )
+        logger.exception("Admin login error: %s", e)
+        print(f"[Admin login 500] {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login failed: {str(e)}"
+        )
 
 # =====================================================
 # Admin Dashboard Routes
@@ -368,24 +410,37 @@ class SizeCreateRequest(BaseModel):
     application_type_id: str
     body_type_id: str
 
-@admin_router.get("/reference-data/summary")
+@admin_router.get("/reference-data-summary")
 async def get_reference_data_summary(
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    """Get counts of all reference data types (only active items)"""
-    
-    return {
-        "categories": db.query(Category).filter(Category.is_active == True).count(),
-        "sub_categories": db.query(SubCategory).count(),
-        "body_types": db.query(BodyType).filter(BodyType.is_active == True).count(),
-        "make_types": db.query(MakeType).filter(MakeType.is_active == True).count(),
-        "surface_types": db.query(SurfaceType).filter(SurfaceType.is_active == True).count(),
-        "application_types": db.query(ApplicationType).filter(ApplicationType.is_active == True).count(),
-        "quality_types": db.query(Quality).filter(Quality.is_active == True).count(),
-        "sizes": db.query(Size).filter(Size.is_active == True).count(),
-        "products": db.query(Product).count()
+    """Get counts of all reference data types. Counts only active rows so card counts match the list."""
+    def safe_count(model, active_only=True):
+        try:
+            q = db.query(model)
+            if active_only and hasattr(model, "is_active"):
+                q = q.filter(model.is_active == True)
+            return q.count()
+        except Exception as e:
+            db.rollback()  # reset failed transaction so later counts can run (e.g. categories.slug missing)
+            logger.warning("reference-data/summary count failed for %s: %s", model.__name__, e)
+            print(f"[reference-data/summary] count failed for {model.__name__}: {e}", file=sys.stderr, flush=True)
+            return 0
+
+    counts = {
+        "categories": safe_count(Category),
+        "sub_categories": safe_count(SubCategory),
+        "body_types": safe_count(BodyType),
+        "make_types": safe_count(MakeType),
+        "surface_types": safe_count(SurfaceType),
+        "application_types": safe_count(ApplicationType),
+        "quality_types": safe_count(Quality),
+        "sizes": safe_count(Size),
+        "products": safe_count(Product),
     }
+    print("[reference-data/summary] counts:", counts, file=sys.stderr, flush=True)
+    return counts
 
 @admin_router.get("/reference-data/{data_type}")
 async def get_reference_data_list(
@@ -436,6 +491,66 @@ async def get_reference_data_list(
         }
         for item in items
     ]
+
+# Size create must be before generic POST so /reference-data/sizes/create matches first
+@admin_router.post("/reference-data/sizes/create")
+async def create_size(
+    size_data: SizeCreateRequest,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Create a new size with all parameters"""
+    app_type = db.query(ApplicationType).filter(ApplicationType.id == size_data.application_type_id).first()
+    if not app_type:
+        raise HTTPException(status_code=400, detail="Invalid application_type_id")
+    body_type = db.query(BodyType).filter(BodyType.id == size_data.body_type_id).first()
+    if not body_type:
+        raise HTTPException(status_code=400, detail="Invalid body_type_id")
+    name_inches = f"{size_data.width_inches} x {size_data.height_inches}"
+    name_mm = f"{size_data.width_mm} x {size_data.height_mm}"
+    existing = db.query(Size).filter(Size.name == name_inches).first()
+    if existing:
+        if existing.is_active:
+            raise HTTPException(status_code=400, detail=f"Size {name_inches} already exists and is active")
+        # Inactive same name: reactivate and update fields instead of inserting (unique on name)
+        existing.name_mm = name_mm
+        existing.width_inches = size_data.width_inches
+        existing.width_mm = size_data.width_mm
+        existing.height_inches = size_data.height_inches
+        existing.height_mm = size_data.height_mm
+        existing.default_packaging_per_box = size_data.default_packaging_per_box
+        existing.application_type_id = size_data.application_type_id
+        existing.body_type_id = size_data.body_type_id
+        existing.is_active = True
+        db.commit()
+        db.refresh(existing)
+        return {
+            "message": f"Size {name_inches} reactivated successfully",
+            "id": str(existing.id),
+            "name_inches": name_inches,
+            "name_mm": name_mm,
+        }
+    new_size = Size(
+        name=name_inches,
+        name_mm=name_mm,
+        width_inches=size_data.width_inches,
+        width_mm=size_data.width_mm,
+        height_inches=size_data.height_inches,
+        height_mm=size_data.height_mm,
+        default_packaging_per_box=size_data.default_packaging_per_box,
+        application_type_id=size_data.application_type_id,
+        body_type_id=size_data.body_type_id,
+        is_active=True,
+    )
+    db.add(new_size)
+    db.commit()
+    db.refresh(new_size)
+    return {
+        "message": f"Size {name_inches} created successfully",
+        "id": str(new_size.id),
+        "name_inches": name_inches,
+        "name_mm": name_mm,
+    }
 
 @admin_router.post("/reference-data/{data_type}")
 async def create_reference_data_item(
@@ -546,64 +661,8 @@ async def delete_reference_data_item(
     return {"message": "Item deactivated successfully"}
 
 # =====================================================
-# Size Management Routes (Special handling)
+# Size detailed list (create is above, before generic POST)
 # =====================================================
-
-@admin_router.post("/reference-data/sizes/create")
-async def create_size(
-    size_data: SizeCreateRequest,
-    current_admin: User = Depends(get_current_admin),
-    db: Session = Depends(get_db)
-):
-    """Create a new size with all parameters"""
-    
-    # Validate application_type exists
-    app_type = db.query(ApplicationType).filter(ApplicationType.id == size_data.application_type_id).first()
-    if not app_type:
-        raise HTTPException(status_code=400, detail="Invalid application_type_id")
-    
-    # Validate body_type exists
-    body_type = db.query(BodyType).filter(BodyType.id == size_data.body_type_id).first()
-    if not body_type:
-        raise HTTPException(status_code=400, detail="Invalid body_type_id")
-    
-    # Generate names
-    name_inches = f"{size_data.width_inches} x {size_data.height_inches}"
-    name_mm = f"{size_data.width_mm} x {size_data.height_mm}"
-    
-    # Check if size with same name already exists
-    existing = db.query(Size).filter(
-        Size.name == name_inches,
-        Size.is_active == True
-    ).first()
-    
-    if existing:
-        raise HTTPException(status_code=400, detail=f"Size {name_inches} already exists and is active")
-    
-    # Create new size
-    new_size = Size(
-        name=name_inches,
-        name_mm=name_mm,
-        width_inches=size_data.width_inches,
-        width_mm=size_data.width_mm,
-        height_inches=size_data.height_inches,
-        height_mm=size_data.height_mm,
-        default_packaging_per_box=size_data.default_packaging_per_box,
-        application_type_id=size_data.application_type_id,
-        body_type_id=size_data.body_type_id,
-        is_active=True
-    )
-    
-    db.add(new_size)
-    db.commit()
-    db.refresh(new_size)
-    
-    return {
-        "message": f"Size {name_inches} created successfully",
-        "id": str(new_size.id),
-        "name_inches": name_inches,
-        "name_mm": name_mm
-    }
 
 @admin_router.get("/reference-data/sizes/detailed")
 async def get_sizes_detailed(

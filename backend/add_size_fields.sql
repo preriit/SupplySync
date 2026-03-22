@@ -5,9 +5,9 @@
 ALTER TABLE sizes 
 ADD COLUMN IF NOT EXISTS name_mm VARCHAR(50);
 
--- 2. Add default packaging per box
+-- 2. Add default packaging per box (default for existing rows)
 ALTER TABLE sizes 
-ADD COLUMN IF NOT EXISTS default_packaging_per_box INTEGER;
+ADD COLUMN IF NOT EXISTS default_packaging_per_box INTEGER DEFAULT 10;
 
 -- 3. Add application_type_id foreign key
 ALTER TABLE sizes 

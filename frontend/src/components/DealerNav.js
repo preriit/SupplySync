@@ -179,7 +179,7 @@ const DealerNav = () => {
                             <div className="flex-1 min-w-0">
                               <p className="font-semibold text-slate truncate">{item.name}</p>
                               <p className="text-sm text-slate-light">
-                                {item.size_display} • {item.make_type} • {item.product_count} products
+                                {item.size_inches} • {item.make_type} • {item.product_count} products
                               </p>
                             </div>
                           </div>

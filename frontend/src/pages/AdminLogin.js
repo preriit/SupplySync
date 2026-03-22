@@ -13,11 +13,13 @@ const AdminLogin = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [errorRaw, setErrorRaw] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setErrorRaw('');
     setLoading(true);
 
     try {
@@ -27,17 +29,25 @@ const AdminLogin = () => {
       });
 
       const { access_token, admin } = response.data;
-      
+
       // Save token and admin info
       localStorage.setItem('admin_token', access_token);
       localStorage.setItem('admin_user', JSON.stringify(admin));
 
-      // Redirect to admin dashboard
       navigate('/admin/dashboard');
     } catch (err) {
-      setError(
-        err.response?.data?.detail || 'Invalid admin credentials'
-      );
+      let msg = err.response?.data?.detail;
+      if (Array.isArray(msg)) msg = msg[0];
+      if (typeof msg !== 'string') msg = 'Invalid admin credentials';
+      setError(msg);
+      // Exact raw message for debugging
+      const raw = {
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        data: err.response?.data,
+        message: err.message,
+      };
+      setErrorRaw(JSON.stringify(raw, null, 2));
     } finally {
       setLoading(false);
     }
@@ -72,8 +82,13 @@ const AdminLogin = () => {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" className="space-y-2">
                   <AlertDescription>{error}</AlertDescription>
+                  {errorRaw && (
+                    <pre className="mt-2 p-2 text-xs bg-black/40 rounded overflow-x-auto whitespace-pre-wrap break-all font-mono text-slate-300">
+                      {errorRaw}
+                    </pre>
+                  )}
                 </Alert>
               )}
 

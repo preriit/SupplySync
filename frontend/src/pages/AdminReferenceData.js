@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AdminLayout from '../components/AdminLayout';
 import { Database, Plus, Trash2, Package } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,6 +28,7 @@ const AdminReferenceData = () => {
   const [selectedType, setSelectedType] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const summaryRequestId = useRef(0);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [selectedBodyType, setSelectedBodyType] = useState('');
@@ -62,21 +63,27 @@ const AdminReferenceData = () => {
 
   useEffect(() => {
     if (selectedType) {
+      setItems([]); // clear previous type's data so we don't show body types when clicking Sizes
       fetchItems(selectedType);
     }
   }, [selectedType]);
 
   const fetchSummary = async () => {
+    summaryRequestId.current += 1;
+    const myId = summaryRequestId.current;
     try {
       const token = localStorage.getItem('admin_token');
-      const response = await api.get('/admin/reference-data/summary', {
+      const response = await api.get('/admin/reference-data-summary', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setSummary(response.data);
+      if (myId !== summaryRequestId.current) return;
+      setSummary(response.data ?? {});
+      setLoading(false);
     } catch (error) {
+      if (myId !== summaryRequestId.current) return;
       console.error('Failed to fetch summary:', error);
       toast.error('Failed to load reference data summary');
-    } finally {
+      setSummary(prev => prev ?? {});
       setLoading(false);
     }
   };
@@ -115,7 +122,8 @@ const AdminReferenceData = () => {
       const response = await api.get(endpoint, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setItems(response.data);
+      const list = Array.isArray(response.data) ? response.data : [];
+      setItems(list);
     } catch (error) {
       console.error('Failed to fetch items:', error);
       toast.error('Failed to load items');
@@ -155,8 +163,9 @@ const AdminReferenceData = () => {
       setNewItemName('');
       setSelectedBodyType('');
       setIsDialogOpen(false);
-      fetchItems(selectedType);
-      fetchSummary();
+      setSummary(prev => ({ ...(prev || {}), [selectedType]: (prev?.[selectedType] ?? 0) + 1 }));
+      await fetchItems(selectedType);
+      await fetchSummary();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create item');
     }
@@ -190,8 +199,9 @@ const AdminReferenceData = () => {
         packagingPerBox: '', applicationTypeId: '', bodyTypeId: ''
       });
       setIsDialogOpen(false);
-      fetchItems('sizes');
-      fetchSummary();
+      setSummary(prev => ({ ...(prev || {}), sizes: (prev?.sizes ?? 0) + 1 }));
+      await fetchItems('sizes');
+      await fetchSummary();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create size');
     }
@@ -207,8 +217,9 @@ const AdminReferenceData = () => {
       });
       
       toast.success('Item deactivated successfully');
-      fetchItems(selectedType);
-      fetchSummary();
+      setSummary(prev => ({ ...(prev || {}), [selectedType]: Math.max(0, (prev?.[selectedType] ?? 0) - 1) }));
+      await fetchItems(selectedType);
+      await fetchSummary();
     } catch (error) {
       toast.error('Failed to deactivate item');
     }

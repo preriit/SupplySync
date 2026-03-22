@@ -34,12 +34,11 @@ const ProtectedRoute = ({ children, requiredType }) => {
   return children;
 };
 
-// Protected Route component for admin
+// Protected Route component for admin (having admin_token is enough; admin_user is for display)
 const AdminProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('admin_token');
-  const admin = JSON.parse(localStorage.getItem('admin_user') || '{}');
 
-  if (!token || admin.user_type !== 'admin') {
+  if (!token) {
     return <Navigate to="/admin/login" replace />;
   }
 

@@ -84,7 +84,8 @@ Search across all sub-categories and products. Minimum 2 characters required.
       "id": "uuid",
       "name": "12X12 DOUBLE CHARGE",
       "size": "12x12",
-      "size_display": "12\" x 12\"",
+      "size_inches": "12 x 12",
+      "size_mm": "300mm x 300mm",
       "make_type": "Double Charge",
       "product_count": 5,
       "type": "subcategory"
@@ -154,10 +155,13 @@ Get all tile sub-categories with product counts for the dealer.
     {
       "id": "uuid",
       "name": "12X12 DOUBLE CHARGE",
-      "size": "12x12",
-      "size_mm": "304mm x 304mm",
+      "size": "12 x 12",
+      "size_id": "uuid-or-null",
+      "size_inches": "12 x 12",
+      "size_mm": "300mm x 300mm",
       "make_type": "Double Charge",
-      "product_count": 5
+      "product_count": 5,
+      "total_quantity": 0
     }
   ]
 }
@@ -171,27 +175,25 @@ Get all tile sub-categories with product counts for the dealer.
 Create or get existing sub-category (smart logic).
 
 **Request Body:**
+
+- **`application_type_id`** (required): UUID from `GET /reference/application-types`.
+- **`size_id`** (preferred) or **`size`** string (e.g. `"12x12"`).
+- **`make_type_id`** (optional): if set, **`body_type_id`** is taken from the make type when it has a linked body; if the make type has no body link, send **`body_type_id`** explicitly.
+- If **`make_type_id`** is omitted, **`body_type_id`** is required.
+- **`default_packing_per_box`** (optional): positive int; otherwise uses the tile size’s default from admin or `10`.
+
 ```json
 {
-  "size": "12x12",
-  "make_type_id": "uuid"
+  "size_id": "uuid",
+  "application_type_id": "uuid",
+  "make_type_id": "uuid",
+  "default_packing_per_box": 4
 }
 ```
 
-**Response:**
-```json
-{
-  "exists": false,
-  "message": "Sub-category created successfully",
-  "subcategory": {
-    "id": "uuid",
-    "name": "12X12 DOUBLE CHARGE",
-    "size": "12x12"
-  }
-}
-```
+**Response:** `subcategory` includes `application_type_id`, `body_type_id`, `application_type`, `body_type`, `default_packing_per_box`, `make_type_id`, `make_type`, display sizes, etc.
 
-**Smart Logic:** If a sub-category with the same size + make_type already exists, it returns the existing one instead of creating a duplicate.
+**Smart Logic:** Uniqueness is per **tiles category + size + make_type** (when make type is set) or **tiles category + size** when **no** make type (partial unique indexes). If an existing row matches, `exists: true`. Existing `size_id` may still be backfilled when applicable.
 
 ---
 
@@ -208,7 +210,11 @@ Get all products under a specific sub-category for the dealer.
   "subcategory": {
     "id": "uuid",
     "name": "12X12 DOUBLE CHARGE",
-    "size": "12x12"
+    "size": "12 x 12",
+    "size_id": "uuid-or-null",
+    "size_inches": "12 x 12",
+    "size_mm": "300mm x 300mm",
+    "make_type": "Double Charge"
   },
   "products": [
     {
@@ -247,9 +253,11 @@ Create a new product under a sub-category.
   "quality_id": "uuid",
   "current_quantity": 50,
   "packing_per_box": 10,
-  "sku": "KAJ-001" // optional
+  "sku": "KAJ-001"
 }
 ```
+
+`application_type_id`, `body_type_id`, and `packing_per_box` may be **omitted** when the sub-category has defaults; the API fills them from the sub-category.
 
 **Response:**
 ```json

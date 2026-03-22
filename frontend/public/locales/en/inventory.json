@@ -17,5 +17,13 @@
   "of": "of",
   "categories": "categories",
   "previous": "Previous",
-  "next": "Next"
+  "next": "Next",
+  "delete_category_title": "Remove category?",
+  "delete_category_warning_products": "Removing this category will deactivate all your products in it. If no other dealer still has stock here, the category will be hidden for everyone.",
+  "delete_category_warning_empty": "This will remove the category from inventory if it is not in use elsewhere.",
+  "delete_category_confirm": "Yes, remove",
+  "delete_category_cancel": "Cancel",
+  "category_removed": "Category removed from inventory",
+  "reactivate_products_label": "Also reactivate my inactive products in this category",
+  "reactivate_products_hint": "Only applies when you are restoring a category that was previously removed. Turns your inactive SKUs in that category back on. Ignored when creating a brand-new category."
 }
