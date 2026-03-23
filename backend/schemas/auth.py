@@ -46,6 +46,13 @@ class UserResponse(BaseModel):
     id: str
     username: str
     email: str
+    phone: Optional[str] = None
     user_type: str
     merchant_id: Optional[str] = None
     preferred_language: str
+
+
+class UpdateProfileRequest(BaseModel):
+    username: Optional[str] = None
+    phone: Optional[str] = None
+    preferred_language: Optional[str] = None

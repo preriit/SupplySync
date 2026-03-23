@@ -14,6 +14,7 @@ from schemas.auth import (
     LoginResponse,
     RegisterDealerRequest,
     SignUpRequest,
+    UpdateProfileRequest,
     UserResponse,
 )
 
@@ -175,7 +176,75 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "id": str(current_user.id),
         "username": current_user.username,
         "email": current_user.email,
+        "phone": current_user.phone,
         "user_type": current_user.user_type,
         "merchant_id": str(current_user.merchant_id) if current_user.merchant_id else None,
         "preferred_language": current_user.preferred_language,
+    }
+
+
+@router.patch("/me", response_model=UserResponse)
+@router.put("/me", response_model=UserResponse)
+async def update_me(
+    request: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Phase 1 profile scope: basic account fields only.
+    if request.username is not None:
+        new_username = request.username.strip()
+        if not new_username:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="username cannot be empty",
+            )
+        exists = (
+            db.query(User)
+            .filter(User.username == new_username, User.id != current_user.id)
+            .first()
+        )
+        if exists:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already taken",
+            )
+        current_user.username = new_username
+
+    if request.phone is not None:
+        new_phone = request.phone.strip()
+        if new_phone:
+            exists = (
+                db.query(User)
+                .filter(User.phone == new_phone, User.id != current_user.id)
+                .first()
+            )
+            if exists:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Phone number already in use",
+                )
+            current_user.phone = new_phone
+        else:
+            current_user.phone = None
+
+    if request.preferred_language is not None:
+        lang = request.preferred_language.strip().lower()
+        if lang not in ("en", "hi"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="preferred_language must be 'en' or 'hi'",
+            )
+        current_user.preferred_language = lang
+
+    db.commit()
+    db.refresh(current_user)
+
+    return {
+        "id": str(current_user.id),
+        "username": current_user.username,
+        "email": current_user.email,
+        "phone": current_user.phone,
+        "user_type": current_user.user_type,
+        "merchant_id": str(current_user.merchant_id) if current_user.merchant_id else None,
+        "preferred_language": current_user.preferred_language or "en",
     }

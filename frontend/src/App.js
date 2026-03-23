@@ -8,6 +8,8 @@ import AddSubCategory from './pages/AddSubCategory';
 import ProductsList from './pages/ProductsList';
 import AddProduct from './pages/AddProduct';
 import ProductDetail from './pages/ProductDetail';
+import DealerComingSoon from './pages/DealerComingSoon';
+import DealerProfile from './pages/DealerProfile';
 
 // Admin Pages
 import AdminLogin from './pages/AdminLogin';
@@ -150,6 +152,36 @@ function App() {
               <ProductDetail />
             </ProtectedRoute>
           } 
+        />
+        <Route
+          path="/dealer/subdealers"
+          element={
+            <ProtectedRoute requiredType="dealer">
+              <DealerComingSoon
+                title="Sub-Dealers"
+                blurb="Invite sub-dealers, define permissions, and keep channel relationships neatly organized."
+              />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dealer/analytics"
+          element={
+            <ProtectedRoute requiredType="dealer">
+              <DealerComingSoon
+                title="Analytics"
+                blurb="Track sell-through, stock movement, and top-performing categories with actionable insights."
+              />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dealer/profile"
+          element={
+            <ProtectedRoute requiredType="dealer">
+              <DealerProfile />
+            </ProtectedRoute>
+          }
         />
         
         {/* Default redirect */}
