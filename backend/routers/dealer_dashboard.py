@@ -94,7 +94,15 @@ async def get_dashboard_stats(
         else:
             title = f"{activity_type.title()} {tile_name}"
 
-        time_diff = datetime.now(timezone.utc) - created_at.replace(tzinfo=timezone.utc)
+        # Show "time ago" in current local timezone.
+        # In this DB, created_at values can be naive but represent local wall-clock time.
+        local_tz = datetime.now().astimezone().tzinfo
+        now_local = datetime.now(local_tz)
+        if created_at.tzinfo is None:
+            created_at_local = created_at.replace(tzinfo=local_tz)
+        else:
+            created_at_local = created_at.astimezone(local_tz)
+        time_diff = now_local - created_at_local
         if time_diff.days > 0:
             if time_diff.days == 1:
                 time_ago = "Yesterday"
