@@ -11,7 +11,9 @@ import '@fontsource/public-sans/600.css';
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+  React.createElement(
+    React.StrictMode,
+    null,
+    React.createElement(App, null),
+  ),
 );

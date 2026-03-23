@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+const API_BASE_URL =
+  import.meta.env.VITE_BACKEND_URL ||
+  // Backward compatibility during CRA -> Vite transition
+  import.meta.env.REACT_APP_BACKEND_URL ||
+  // Sensible local default; works with backend mounted under /api
+  'http://localhost:8001/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
