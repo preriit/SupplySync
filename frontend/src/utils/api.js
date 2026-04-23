@@ -1,11 +1,10 @@
 import axios from 'axios';
 
-const API_BASE_URL =
-  import.meta.env.VITE_BACKEND_URL ||
-  // Backward compatibility during CRA -> Vite transition
-  import.meta.env.REACT_APP_BACKEND_URL ||
-  // Sensible local default; works with backend mounted under /api
-  'http://localhost:8001/api';
+const rawBaseUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
+const normalizedBaseUrl = rawBaseUrl.replace(/\/+$/, '');
+const API_BASE_URL = normalizedBaseUrl.endsWith('/api')
+  ? normalizedBaseUrl
+  : `${normalizedBaseUrl}/api`;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -14,39 +13,49 @@ const api = axios.create({
   },
 });
 
-// Add token to requests: use admin_token for admin paths, else token
+// Add token to requests if available
 api.interceptors.request.use((config) => {
-  const url = (config.url || '').toString();
-  const isAdminRequest = url.includes('/admin/') || url.startsWith('admin');
-  const token = isAdminRequest
+  // Preserve explicitly provided auth headers per-request.
+  if (config.headers?.Authorization) {
+    return config;
+  }
+
+  const isAdminRoute = window.location.pathname.startsWith('/admin');
+  const token = isAdminRoute
     ? localStorage.getItem('admin_token')
     : localStorage.getItem('token');
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-// Handle 401 responses: redirect to login when session expired (do NOT redirect on login endpoint failure)
+// Handle 401 responses
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      const requestUrl = (error.config?.url || '').toString();
-      const isLoginRequest = requestUrl.includes('auth/login');
-      // Don't redirect on failed login — let the login page show "Invalid credentials"
-      if (isLoginRequest) {
-        return Promise.reject(error);
-      }
-      const isAdminRequest = requestUrl.includes('/admin/') || requestUrl.startsWith('admin');
-      if (isAdminRequest) {
-        localStorage.removeItem('admin_token');
-        localStorage.removeItem('admin_user');
-        window.location.href = '/admin/login';
+      // Check if it's an admin route
+      const isAdminRoute = window.location.pathname.startsWith('/admin');
+      
+      if (isAdminRoute) {
+        // Only redirect if user is authenticated but token expired
+        // Don't redirect on login failures
+        const hasAdminToken = localStorage.getItem('admin_token');
+        if (hasAdminToken && !error.config.url.includes('/login')) {
+          localStorage.removeItem('admin_token');
+          localStorage.removeItem('admin_user');
+          window.location.href = '/admin/login';
+        }
       } else {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
+        // Regular dealer routes
+        const hasToken = localStorage.getItem('token');
+        if (hasToken && !error.config.url.includes('/login')) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          window.location.href = '/login';
+        }
       }
     }
     return Promise.reject(error);

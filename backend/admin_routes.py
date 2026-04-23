@@ -5,30 +5,15 @@ Handles admin authentication and management endpoints
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, case
 from pydantic import BaseModel, EmailStr
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 import logging
-import sys
 
 from database import get_db
-from models import (
-    User,
-    Merchant,
-    Product,
-    SubCategory,
-    Category,
-    BodyType,
-    MakeType,
-    SurfaceType,
-    ApplicationType,
-    Size,
-    Quality,
-)
-from auth import get_password_hash, verify_password, create_access_token, get_current_user, truncate_password_for_bcrypt
-
-logger = logging.getLogger(__name__)
+from models import User, Merchant, Product, ProductTransaction, SubCategory, Category, BodyType, MakeType, SurfaceType, ApplicationType, Size, Quality
+from auth import get_password_hash, verify_password, create_access_token, get_current_user
 
 # Create admin router
 admin_router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -92,6 +77,17 @@ class DashboardStatsResponse(BaseModel):
     expired_subscriptions: int
     suspended_users: int
 
+
+class AnalyticsKPIResponse(BaseModel):
+    period_days: int
+    dead_stock_days: int
+    total_products: int
+    products_with_movement: int
+    total_units_added: int
+    total_units_removed: int
+    dead_stock_count: int
+    avg_rotation_score: float
+
 # =====================================================
 # Helper Functions
 # =====================================================
@@ -109,87 +105,55 @@ def get_current_admin(current_user: User = Depends(get_current_user)):
 # Admin Authentication Routes
 # =====================================================
 
-def _debug_log(msg: str) -> None:
-    """Print to stderr so it shows in the terminal where uvicorn runs."""
-    print(f"[admin/login] {msg}", file=sys.stderr, flush=True)
-    logger.debug(msg)
-
-
 @admin_router.post("/auth/login", response_model=AdminLoginResponse)
 async def admin_login(request: AdminLoginRequest, db: Session = Depends(get_db)):
     """Admin login endpoint - separate from dealer/subdealer login"""
-    try:
-        _debug_log(f"Attempt: username={request.username!r}")
 
-        # Find admin user by username
-        admin_user = db.query(User).filter(
-            and_(
-                User.username == request.username,
-                User.user_type == 'admin'
-            )
-        ).first()
-
-        if not admin_user:
-            _debug_log("401 reason: no admin user found for this username")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid admin credentials"
-            )
-
-        _debug_log(f"Admin user found: id={admin_user.id}")
-
-        raw_password = getattr(request, "password", None) or ""
-        password = truncate_password_for_bcrypt(raw_password if isinstance(raw_password, str) else str(raw_password))
-        password_ok = verify_password(password, admin_user.password_hash)
-
-        if not password_ok:
-            _debug_log("401 reason: password verification failed (hash mismatch)")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid admin credentials"
-            )
-
-        if not admin_user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Admin account is inactive"
-            )
-
-        # Update last login
-        admin_user.last_login = datetime.now(timezone.utc)
-        db.commit()
-
-        # Create access token
-        access_token = create_access_token(data={"sub": str(admin_user.id)})
-        _debug_log("Login success")
-
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "admin": {
-                "id": str(admin_user.id),
-                "username": admin_user.username,
-                "email": admin_user.email or "",
-                "role": admin_user.role or "",
-                "user_type": admin_user.user_type
-            }
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        _debug_log(f"Exception: {type(e).__name__}: {e}")
-        err_msg = str(e).lower()
-        if "72 bytes" in err_msg or ("truncate" in err_msg and "password" in err_msg):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid admin credentials"
-            )
-        logger.exception("Admin login error: %s", e)
-        print(f"[Admin login 500] {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+    login_id = (request.username or "").strip()
+    if not login_id:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Login failed: {str(e)}"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username is required",
         )
+
+    # Find admin user by username only
+    admin_user = db.query(User).filter(
+        and_(
+            User.username == login_id,
+            User.user_type == 'admin'
+        )
+    ).first()
+    
+    if not admin_user or not verify_password(request.password, admin_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin credentials"
+        )
+    
+    if not admin_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin account is inactive"
+        )
+    
+    # Update last login
+    admin_user.last_login = datetime.now(timezone.utc)
+    db.commit()
+    
+    # Create access token
+    access_token = create_access_token(data={"sub": str(admin_user.id)})
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "admin": {
+            "id": str(admin_user.id),
+            "username": admin_user.username,
+            "email": admin_user.email,
+            "role": admin_user.role,
+            "user_type": admin_user.user_type
+        }
+    }
 
 # =====================================================
 # Admin Dashboard Routes
@@ -259,6 +223,153 @@ async def get_admin_dashboard_stats(
         "trial_subscriptions": trial_subs,
         "expired_subscriptions": expired_subs,
         "suspended_users": suspended_users
+    }
+
+
+@admin_router.get("/analytics/inventory")
+async def get_inventory_analytics(
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+    days: int = 30,
+    dead_stock_days: int = 60,
+    limit: int = 8,
+):
+    """Inventory analytics: fast movers, dead stock, and rotation KPIs."""
+    days = max(1, min(days, 365))
+    dead_stock_days = max(1, min(dead_stock_days, 3650))
+    limit = max(1, min(limit, 50))
+
+    # DB timestamps are stored as naive UTC datetimes in this project, so keep
+    # comparisons naive to avoid offset-aware/naive comparison errors.
+    now = datetime.utcnow()
+    period_start = now - timedelta(days=days)
+    dead_stock_cutoff = now - timedelta(days=dead_stock_days)
+
+    latest_tx_subquery = (
+        db.query(
+            ProductTransaction.product_id.label("product_id"),
+            func.max(ProductTransaction.created_at).label("last_tx_at"),
+        )
+        .group_by(ProductTransaction.product_id)
+        .subquery()
+    )
+
+    rows = (
+        db.query(
+            Product.id.label("product_id"),
+            Product.name.label("product_name"),
+            Product.brand.label("brand"),
+            Product.current_quantity.label("current_quantity"),
+            Merchant.name.label("merchant_name"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (ProductTransaction.transaction_type == "subtract", ProductTransaction.quantity),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("qty_out"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (ProductTransaction.transaction_type == "add", ProductTransaction.quantity),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("qty_in"),
+            latest_tx_subquery.c.last_tx_at.label("last_tx_at"),
+        )
+        .join(Merchant, Merchant.id == Product.merchant_id)
+        .outerjoin(
+            ProductTransaction,
+            and_(
+                ProductTransaction.product_id == Product.id,
+                ProductTransaction.created_at >= period_start,
+            ),
+        )
+        .outerjoin(latest_tx_subquery, latest_tx_subquery.c.product_id == Product.id)
+        .group_by(
+            Product.id,
+            Product.name,
+            Product.brand,
+            Product.current_quantity,
+            Merchant.name,
+            latest_tx_subquery.c.last_tx_at,
+        )
+        .all()
+    )
+
+    fast_movers = []
+    dead_stock = []
+    rotation_scores = []
+    total_units_removed = 0
+    total_units_added = 0
+    products_with_movement = 0
+
+    for row in rows:
+        qty_out = int(row.qty_out or 0)
+        qty_in = int(row.qty_in or 0)
+        current_qty = int(row.current_quantity or 0)
+        total_units_removed += qty_out
+        total_units_added += qty_in
+
+        if qty_out or qty_in:
+            products_with_movement += 1
+
+        rotation_score = 0.0
+        baseline_stock = current_qty + qty_out
+        if qty_out > 0:
+            rotation_score = round(min(100.0, (qty_out / max(baseline_stock, 1)) * 100.0), 2)
+            rotation_scores.append(rotation_score)
+            fast_movers.append(
+                {
+                    "product_id": str(row.product_id),
+                    "product_name": row.product_name,
+                    "brand": row.brand,
+                    "merchant_name": row.merchant_name,
+                    "units_moved": qty_out,
+                    "current_quantity": current_qty,
+                    "rotation_score": rotation_score,
+                }
+            )
+
+        last_tx_at = row.last_tx_at
+        is_dead_stock = current_qty > 0 and (last_tx_at is None or last_tx_at < dead_stock_cutoff)
+        if is_dead_stock:
+            days_since_movement = dead_stock_days if last_tx_at is None else max(0, (now - last_tx_at).days)
+            dead_stock.append(
+                {
+                    "product_id": str(row.product_id),
+                    "product_name": row.product_name,
+                    "brand": row.brand,
+                    "merchant_name": row.merchant_name,
+                    "current_quantity": current_qty,
+                    "days_since_movement": days_since_movement,
+                }
+            )
+
+    fast_movers.sort(key=lambda item: (item["units_moved"], item["rotation_score"]), reverse=True)
+    dead_stock.sort(key=lambda item: (item["days_since_movement"], item["current_quantity"]), reverse=True)
+
+    avg_rotation_score = round(sum(rotation_scores) / len(rotation_scores), 2) if rotation_scores else 0.0
+
+    kpis = {
+        "period_days": days,
+        "dead_stock_days": dead_stock_days,
+        "total_products": len(rows),
+        "products_with_movement": products_with_movement,
+        "total_units_added": total_units_added,
+        "total_units_removed": total_units_removed,
+        "dead_stock_count": len(dead_stock),
+        "avg_rotation_score": avg_rotation_score,
+    }
+
+    return {
+        "kpis": kpis,
+        "fast_movers": fast_movers[:limit],
+        "dead_stock": dead_stock[:limit],
     }
 
 # =====================================================
@@ -434,37 +545,24 @@ class SizeCreateRequest(BaseModel):
     application_type_id: str
     body_type_id: str
 
-@admin_router.get("/reference-data-summary")
+@admin_router.get("/reference-data/summary")
 async def get_reference_data_summary(
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    """Get counts of all reference data types. Counts only active rows so card counts match the list."""
-    def safe_count(model, active_only=True):
-        try:
-            q = db.query(model)
-            if active_only and hasattr(model, "is_active"):
-                q = q.filter(model.is_active == True)
-            return q.count()
-        except Exception as e:
-            db.rollback()  # reset failed transaction so later counts can run (e.g. categories.slug missing)
-            logger.warning("reference-data/summary count failed for %s: %s", model.__name__, e)
-            print(f"[reference-data/summary] count failed for {model.__name__}: {e}", file=sys.stderr, flush=True)
-            return 0
-
-    counts = {
-        "categories": safe_count(Category),
-        "sub_categories": safe_count(SubCategory),
-        "body_types": safe_count(BodyType),
-        "make_types": safe_count(MakeType),
-        "surface_types": safe_count(SurfaceType),
-        "application_types": safe_count(ApplicationType),
-        "quality_types": safe_count(Quality),
-        "sizes": safe_count(Size),
-        "products": safe_count(Product),
+    """Get counts of all reference data types (only active items)"""
+    
+    return {
+        "categories": db.query(Category).filter(Category.is_active == True).count(),
+        "sub_categories": db.query(SubCategory).count(),
+        "body_types": db.query(BodyType).filter(BodyType.is_active == True).count(),
+        "make_types": db.query(MakeType).filter(MakeType.is_active == True).count(),
+        "surface_types": db.query(SurfaceType).filter(SurfaceType.is_active == True).count(),
+        "application_types": db.query(ApplicationType).filter(ApplicationType.is_active == True).count(),
+        "quality_types": db.query(Quality).filter(Quality.is_active == True).count(),
+        "sizes": db.query(Size).filter(Size.is_active == True).count(),
+        "products": db.query(Product).count()
     }
-    print("[reference-data/summary] counts:", counts, file=sys.stderr, flush=True)
-    return counts
 
 @admin_router.get("/reference-data/{data_type}")
 async def get_reference_data_list(
@@ -515,66 +613,6 @@ async def get_reference_data_list(
         }
         for item in items
     ]
-
-# Size create must be before generic POST so /reference-data/sizes/create matches first
-@admin_router.post("/reference-data/sizes/create")
-async def create_size(
-    size_data: SizeCreateRequest,
-    current_admin: User = Depends(get_current_admin),
-    db: Session = Depends(get_db)
-):
-    """Create a new size with all parameters"""
-    app_type = db.query(ApplicationType).filter(ApplicationType.id == size_data.application_type_id).first()
-    if not app_type:
-        raise HTTPException(status_code=400, detail="Invalid application_type_id")
-    body_type = db.query(BodyType).filter(BodyType.id == size_data.body_type_id).first()
-    if not body_type:
-        raise HTTPException(status_code=400, detail="Invalid body_type_id")
-    name_inches = f"{size_data.width_inches} x {size_data.height_inches}"
-    name_mm = f"{size_data.width_mm} x {size_data.height_mm}"
-    existing = db.query(Size).filter(Size.name == name_inches).first()
-    if existing:
-        if existing.is_active:
-            raise HTTPException(status_code=400, detail=f"Size {name_inches} already exists and is active")
-        # Inactive same name: reactivate and update fields instead of inserting (unique on name)
-        existing.name_mm = name_mm
-        existing.width_inches = size_data.width_inches
-        existing.width_mm = size_data.width_mm
-        existing.height_inches = size_data.height_inches
-        existing.height_mm = size_data.height_mm
-        existing.default_packaging_per_box = size_data.default_packaging_per_box
-        existing.application_type_id = size_data.application_type_id
-        existing.body_type_id = size_data.body_type_id
-        existing.is_active = True
-        db.commit()
-        db.refresh(existing)
-        return {
-            "message": f"Size {name_inches} reactivated successfully",
-            "id": str(existing.id),
-            "name_inches": name_inches,
-            "name_mm": name_mm,
-        }
-    new_size = Size(
-        name=name_inches,
-        name_mm=name_mm,
-        width_inches=size_data.width_inches,
-        width_mm=size_data.width_mm,
-        height_inches=size_data.height_inches,
-        height_mm=size_data.height_mm,
-        default_packaging_per_box=size_data.default_packaging_per_box,
-        application_type_id=size_data.application_type_id,
-        body_type_id=size_data.body_type_id,
-        is_active=True,
-    )
-    db.add(new_size)
-    db.commit()
-    db.refresh(new_size)
-    return {
-        "message": f"Size {name_inches} created successfully",
-        "id": str(new_size.id),
-        "name_inches": name_inches,
-        "name_mm": name_mm,
-    }
 
 @admin_router.post("/reference-data/{data_type}")
 async def create_reference_data_item(
@@ -685,8 +723,88 @@ async def delete_reference_data_item(
     return {"message": "Item deactivated successfully"}
 
 # =====================================================
-# Size detailed list (create is above, before generic POST)
+# Size Management Routes (Special handling)
 # =====================================================
+
+@admin_router.post("/reference-data/sizes/create")
+async def create_size(
+    size_data: SizeCreateRequest,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Create a new size with all parameters"""
+    
+    # Validate application_type exists
+    app_type = db.query(ApplicationType).filter(ApplicationType.id == size_data.application_type_id).first()
+    if not app_type:
+        raise HTTPException(status_code=400, detail="Invalid application_type_id")
+    
+    # Validate body_type exists
+    body_type = db.query(BodyType).filter(BodyType.id == size_data.body_type_id).first()
+    if not body_type:
+        raise HTTPException(status_code=400, detail="Invalid body_type_id")
+    
+    # Generate names
+    name_inches = f"{size_data.width_inches} x {size_data.height_inches}"
+    name_mm = f"{size_data.width_mm} x {size_data.height_mm}"
+    
+    # Check if size with same name already exists (active or inactive)
+    existing = db.query(Size).filter(Size.name == name_inches).first()
+    
+    if existing:
+        if existing.is_active:
+            raise HTTPException(status_code=400, detail=f"Size '{name_inches}' already exists and is active")
+        else:
+            # Reactivate the existing inactive size
+            existing.is_active = True
+            existing.name_mm = name_mm
+            existing.width_inches = size_data.width_inches
+            existing.width_mm = size_data.width_mm
+            existing.height_inches = size_data.height_inches
+            existing.height_mm = size_data.height_mm
+            existing.default_packaging_per_box = size_data.default_packaging_per_box
+            existing.application_type_id = size_data.application_type_id
+            existing.body_type_id = size_data.body_type_id
+            db.commit()
+            db.refresh(existing)
+            return {
+                "message": f"Size '{name_inches}' reactivated successfully",
+                "id": str(existing.id),
+                "name_inches": name_inches,
+                "name_mm": name_mm
+            }
+    
+    # Create new size
+    new_size = Size(
+        name=name_inches,
+        name_mm=name_mm,
+        width_inches=size_data.width_inches,
+        width_mm=size_data.width_mm,
+        height_inches=size_data.height_inches,
+        height_mm=size_data.height_mm,
+        default_packaging_per_box=size_data.default_packaging_per_box,
+        application_type_id=size_data.application_type_id,
+        body_type_id=size_data.body_type_id,
+        is_active=True
+    )
+    
+    try:
+        db.add(new_size)
+        db.commit()
+        db.refresh(new_size)
+        
+        return {
+            "message": f"Size '{name_inches}' created successfully",
+            "id": str(new_size.id),
+            "name_inches": name_inches,
+            "name_mm": name_mm
+        }
+    except Exception as e:
+        db.rollback()
+        # Handle any database constraint violations
+        if "duplicate key" in str(e).lower() or "unique constraint" in str(e).lower():
+            raise HTTPException(status_code=400, detail=f"Size '{name_inches}' already exists in the database")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @admin_router.get("/reference-data/sizes/detailed")
 async def get_sizes_detailed(
@@ -719,3 +837,71 @@ async def get_sizes_detailed(
         })
     
     return result
+
+
+# =====================================================
+# Data Integrity Audit Routes
+# =====================================================
+
+@admin_router.get("/data-integrity/team-linkage")
+async def audit_team_member_linkage(
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+    limit: int = 200,
+):
+    """
+    Audit team-member linkage rules.
+
+    Rule:
+    - Every user with user_type in ['staff', 'manager'] must have a valid merchant_id.
+    """
+    limit = max(1, min(limit, 1000))
+
+    team_members = db.query(User).filter(
+        User.user_type.in_(["staff", "manager"]),
+        User.deleted_at.is_(None),
+    ).all()
+
+    merchants = db.query(Merchant.id).filter(Merchant.deleted_at.is_(None)).all()
+    active_merchant_ids = {str(row[0]) for row in merchants}
+
+    missing_merchant = []
+    invalid_merchant = []
+    healthy_count = 0
+
+    for user in team_members:
+        if not user.merchant_id:
+            missing_merchant.append(user)
+            continue
+        if str(user.merchant_id) not in active_merchant_ids:
+            invalid_merchant.append(user)
+            continue
+        healthy_count += 1
+
+    def to_payload(users: list[User]):
+        return [
+            {
+                "id": str(user.id),
+                "username": user.username,
+                "email": user.email,
+                "user_type": user.user_type,
+                "merchant_id": str(user.merchant_id) if user.merchant_id else None,
+                "is_active": user.is_active,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+            }
+            for user in users[:limit]
+        ]
+
+    return {
+        "summary": {
+            "total_team_members": len(team_members),
+            "healthy_linked_members": healthy_count,
+            "missing_merchant_count": len(missing_merchant),
+            "invalid_merchant_reference_count": len(invalid_merchant),
+            "is_compliant": len(missing_merchant) == 0 and len(invalid_merchant) == 0,
+        },
+        "violations": {
+            "missing_merchant": to_payload(missing_merchant),
+            "invalid_merchant_reference": to_payload(invalid_merchant),
+        },
+    }

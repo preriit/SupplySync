@@ -47,6 +47,9 @@ const ProductDetail = () => {
   const navigate = useNavigate();
   const { subcategoryId, productId } = useParams();
   const { toast } = useToast();
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const canWriteInventory = ['dealer', 'manager'].includes(user.user_type);
+  const canDeleteInventory = user.user_type === 'dealer';
   
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -128,6 +131,14 @@ const ProductDetail = () => {
   };
 
   const handleEdit = () => {
+    if (!canWriteInventory) {
+      toast({
+        title: 'Access denied',
+        description: 'View-only access for staff accounts',
+        variant: 'destructive',
+      });
+      return;
+    }
     setIsEditing(true);
   };
 
@@ -137,6 +148,9 @@ const ProductDetail = () => {
   };
 
   const handleSave = async () => {
+    if (!canWriteInventory) {
+      return;
+    }
     setSaving(true);
     try {
       const updateData = {
@@ -171,6 +185,14 @@ const ProductDetail = () => {
   };
 
   const handleDelete = async () => {
+    if (!canDeleteInventory) {
+      toast({
+        title: 'Access denied',
+        description: 'Only dealer can delete inventory records',
+        variant: 'destructive',
+      });
+      return;
+    }
     setDeleting(true);
     try {
       await api.delete(`/dealer/products/${productId}`);
@@ -299,21 +321,25 @@ const ProductDetail = () => {
                     <History className="mr-2 h-4 w-4" />
                     History
                   </Button>
-                  <Button
-                    onClick={handleEdit}
-                    className="bg-orange hover:bg-orange-dark text-white"
-                  >
-                    <Edit className="mr-2 h-4 w-4" />
-                    Edit
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="text-red-600 hover:bg-red-50 border-red-200"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </Button>
+                  {canWriteInventory && (
+                    <Button
+                      onClick={handleEdit}
+                      className="bg-orange hover:bg-orange-dark text-white"
+                    >
+                      <Edit className="mr-2 h-4 w-4" />
+                      Edit
+                    </Button>
+                  )}
+                  {canDeleteInventory && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="text-red-600 hover:bg-red-50 border-red-200"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </Button>
+                  )}
                 </>
               ) : (
                 <>

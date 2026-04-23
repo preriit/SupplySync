@@ -33,6 +33,8 @@ const ProductsList = () => {
   const navigate = useNavigate();
   const { subcategoryId } = useParams();
   const { toast } = useToast();
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const canWriteInventory = ['dealer', 'manager'].includes(user.user_type);
   const [subcategory, setSubcategory] = useState(null);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -243,13 +245,15 @@ const ProductsList = () => {
                 <h1 className="text-3xl font-display font-bold text-slate">
                   Products
                 </h1>
-                <Button
-                  onClick={handleAddProduct}
-                  className="bg-orange hover:bg-orange-dark text-white shadow-md"
-                >
-                  <Plus className="mr-2 h-5 w-5" />
-                  Add Product
-                </Button>
+                {canWriteInventory && (
+                  <Button
+                    onClick={handleAddProduct}
+                    className="bg-orange hover:bg-orange-dark text-white shadow-md"
+                  >
+                    <Plus className="mr-2 h-5 w-5" />
+                    Add Product
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -266,13 +270,15 @@ const ProductsList = () => {
                   <p className="text-slate-light mb-4">
                     Start by adding your first product to this category
                   </p>
-                  <Button
-                    onClick={handleAddProduct}
-                    className="bg-orange hover:bg-orange-dark"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Your First Product
-                  </Button>
+                  {canWriteInventory && (
+                    <Button
+                      onClick={handleAddProduct}
+                      className="bg-orange hover:bg-orange-dark"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Your First Product
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ) : (
@@ -317,14 +323,16 @@ const ProductsList = () => {
                           <div className="pt-3 border-t border-gray-100">
                             <label className="text-xs text-slate-light mb-1 block">Quantity (boxes)</label>
                             <div className="flex items-center space-x-2">
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-9 w-9 border-red-500 text-red-500 hover:bg-red-50"
-                                onClick={() => setTransactionProduct({ ...product, type: 'subtract' })}
-                              >
-                                <Minus className="h-4 w-4" />
-                              </Button>
+                              {canWriteInventory && (
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-9 w-9 border-red-500 text-red-500 hover:bg-red-50"
+                                  onClick={() => setTransactionProduct({ ...product, type: 'subtract' })}
+                                >
+                                  <Minus className="h-4 w-4" />
+                                </Button>
+                              )}
                               
                               <div className="flex-1 text-center">
                                 <div className="text-2xl font-bold text-slate">
@@ -333,14 +341,16 @@ const ProductsList = () => {
                                 <div className="text-xs text-slate-light">boxes</div>
                               </div>
                               
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-9 w-9 border-green-500 text-green-500 hover:bg-green-50"
-                                onClick={() => setTransactionProduct({ ...product, type: 'add' })}
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
+                              {canWriteInventory && (
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-9 w-9 border-green-500 text-green-500 hover:bg-green-50"
+                                  onClick={() => setTransactionProduct({ ...product, type: 'add' })}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           </div>
 
@@ -361,7 +371,7 @@ const ProductsList = () => {
                               className="hover:bg-gray-50"
                               onClick={() => navigate(`/dealer/inventory/${subcategoryId}/products/${product.id}`)}
                             >
-                              <Edit className="h-4 w-4" />
+                              {canWriteInventory ? <Edit className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                             </Button>
                           </div>
                         </div>

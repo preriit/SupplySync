@@ -12,6 +12,7 @@ const DealerDashboard = () => {
   const { t } = useTranslation(['dashboard', 'common']);
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const canWriteInventory = ['dealer', 'manager'].includes(user.user_type);
   const [stats, setStats] = useState({
     total_products: 0,
     active_products: 0,
@@ -111,13 +112,15 @@ const DealerDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Button
-                  onClick={() => navigate('/dealer/inventory')}
-                  className="bg-orange hover:bg-orange-dark h-24 flex flex-col items-center justify-center space-y-2"
-                >
-                  <Plus className="h-8 w-8" />
-                  <span className="font-semibold">{t('dashboard:add_product')}</span>
-                </Button>
+                {canWriteInventory && (
+                  <Button
+                    onClick={() => navigate('/dealer/inventory')}
+                    className="bg-orange hover:bg-orange-dark h-24 flex flex-col items-center justify-center space-y-2"
+                  >
+                    <Plus className="h-8 w-8" />
+                    <span className="font-semibold">{t('dashboard:add_product')}</span>
+                  </Button>
+                )}
                 
                 <Button
                   onClick={() => navigate('/dealer/inventory')}
@@ -161,7 +164,7 @@ const DealerDashboard = () => {
         </div>
 
         {/* Get Started Guide - Show if no products */}
-        {!loading && stats.total_products === 0 && (
+        {!loading && stats.total_products === 0 && canWriteInventory && (
           <Card className="mt-6 border-orange border-2">
             <CardHeader>
               <CardTitle className="text-xl font-display text-orange">

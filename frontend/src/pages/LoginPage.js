@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,10 +34,10 @@ const LoginPage = () => {
       localStorage.setItem('user', JSON.stringify(user));
 
       // Redirect based on user type
-      if (user.user_type === 'dealer') {
+      if (['dealer', 'manager', 'staff'].includes(user.user_type)) {
         navigate('/dealer/dashboard');
       } else {
-        navigate('/subdealer/dashboard');
+        navigate('/login');
       }
     } catch (err) {
       setError(
@@ -103,6 +103,11 @@ const LoginPage = () => {
                   required
                   disabled={loading}
                 />
+                <div className="text-right">
+                  <Link to="/forgot-password" className="text-sm text-orange hover:underline">
+                    Forgot password?
+                  </Link>
+                </div>
               </div>
 
               <Button 

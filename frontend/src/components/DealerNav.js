@@ -20,6 +20,7 @@ const DealerNav = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const canManageTeam = user.user_type === 'dealer';
   
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,7 +87,7 @@ const DealerNav = () => {
     { path: '/dealer/dashboard', label: t('dashboard:nav.dashboard'), icon: LayoutDashboard },
     { path: '/dealer/inventory', label: t('dashboard:nav.inventory'), icon: Package },
     // { path: '/dealer/orders', label: t('dashboard:nav.orders'), icon: ShoppingCart }, // Hidden
-    { path: '/dealer/subdealers', label: t('dashboard:nav.subdealers'), icon: Users },
+    ...(canManageTeam ? [{ path: '/dealer/team-members', label: 'Team Members', icon: Users }] : []),
     { path: '/dealer/analytics', label: t('dashboard:nav.analytics'), icon: BarChart3 },
   ];
 

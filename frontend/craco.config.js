@@ -9,7 +9,9 @@ const isDevServer = process.env.NODE_ENV !== "production";
 // Environment variable overrides
 const config = {
   enableHealthCheck: process.env.ENABLE_HEALTH_CHECK === "true",
-  enableVisualEdits: isDevServer, // Only enable during dev server
+  // Keep visual edit middleware disabled by default for local stability.
+  // Enable only when explicitly requested.
+  enableVisualEdits: isDevServer && process.env.ENABLE_VISUAL_EDITS === "true",
 };
 
 // Conditionally load visual edits modules only in dev mode
@@ -32,6 +34,35 @@ if (config.enableHealthCheck) {
   healthPluginInstance = new WebpackHealthPlugin();
 }
 
+const withTailwindPostCss = (webpackConfig) => {
+  const oneOfContainer = webpackConfig.module?.rules?.find((rule) => Array.isArray(rule.oneOf));
+  if (!oneOfContainer) {
+    return webpackConfig;
+  }
+
+  oneOfContainer.oneOf.forEach((rule) => {
+    if (!Array.isArray(rule.use)) {
+      return;
+    }
+
+    rule.use.forEach((loader) => {
+      if (!loader.loader || !loader.loader.includes("postcss-loader")) {
+        return;
+      }
+
+      loader.options = {
+        ...(loader.options || {}),
+        postcssOptions: {
+          ident: "postcss",
+          plugins: [require("tailwindcss"), require("autoprefixer")],
+        },
+      };
+    });
+  });
+
+  return webpackConfig;
+};
+
 const webpackConfig = {
   eslint: {
     configure: {
@@ -47,11 +78,7 @@ const webpackConfig = {
       '@': path.resolve(__dirname, 'src'),
     },
     configure: (webpackConfig) => {
-      // Disable TypeScript checker (project is JS-only). Avoids ajv/ajv-keywords
-      // version mismatch inside fork-ts-checker-webpack-plugin (formats undefined).
-      webpackConfig.plugins = (webpackConfig.plugins || []).filter(
-        (p) => p && p.constructor && p.constructor.name !== "ForkTsCheckerWebpackPlugin"
-      );
+      withTailwindPostCss(webpackConfig);
 
       // Add ignored patterns to reduce watched directories
         webpackConfig.watchOptions = {

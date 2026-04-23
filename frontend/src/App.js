@@ -2,14 +2,15 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import SignUpPage from './pages/SignUpPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import DealerDashboard from './pages/DealerDashboard';
 import SubCategoriesList from './pages/SubCategoriesList';
 import AddSubCategory from './pages/AddSubCategory';
 import ProductsList from './pages/ProductsList';
 import AddProduct from './pages/AddProduct';
 import ProductDetail from './pages/ProductDetail';
-import DealerComingSoon from './pages/DealerComingSoon';
-import DealerProfile from './pages/DealerProfile';
+import TeamMembersPage from './pages/TeamMembersPage';
 
 // Admin Pages
 import AdminLogin from './pages/AdminLogin';
@@ -21,8 +22,8 @@ import AdminAnalytics from './pages/AdminAnalytics';
 
 import './App.css';
 
-// Protected Route component for dealers
-const ProtectedRoute = ({ children, requiredType }) => {
+// Protected Route component for merchant user flows
+const ProtectedRoute = ({ children, allowedTypes = [] }) => {
   const token = localStorage.getItem('token');
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -30,18 +31,19 @@ const ProtectedRoute = ({ children, requiredType }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (requiredType && user.user_type !== requiredType) {
+  if (allowedTypes.length > 0 && !allowedTypes.includes(user.user_type)) {
     return <Navigate to="/" replace />;
   }
 
   return children;
 };
 
-// Protected Route component for admin (having admin_token is enough; admin_user is for display)
+// Protected Route component for admin
 const AdminProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('admin_token');
+  const admin = JSON.parse(localStorage.getItem('admin_user') || '{}');
 
-  if (!token) {
+  if (!token || admin.user_type !== 'admin') {
     return <Navigate to="/admin/login" replace />;
   }
 
@@ -55,6 +57,9 @@ function App() {
         {/* Public Routes */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {/* Admin Routes */}
         <Route path="/admin/login" element={<AdminLogin />} />
@@ -103,7 +108,7 @@ function App() {
         <Route 
           path="/dealer/dashboard" 
           element={
-            <ProtectedRoute requiredType="dealer">
+            <ProtectedRoute allowedTypes={['dealer', 'manager', 'staff']}>
               <DealerDashboard />
             </ProtectedRoute>
           } 
@@ -112,7 +117,7 @@ function App() {
         <Route 
           path="/dealer/inventory" 
           element={
-            <ProtectedRoute requiredType="dealer">
+            <ProtectedRoute allowedTypes={['dealer', 'manager', 'staff']}>
               <SubCategoriesList />
             </ProtectedRoute>
           } 
@@ -121,7 +126,7 @@ function App() {
         <Route 
           path="/dealer/inventory/add-category" 
           element={
-            <ProtectedRoute requiredType="dealer">
+            <ProtectedRoute allowedTypes={['dealer', 'manager']}>
               <AddSubCategory />
             </ProtectedRoute>
           } 
@@ -130,7 +135,7 @@ function App() {
         <Route 
           path="/dealer/inventory/:subcategoryId/products" 
           element={
-            <ProtectedRoute requiredType="dealer">
+            <ProtectedRoute allowedTypes={['dealer', 'manager', 'staff']}>
               <ProductsList />
             </ProtectedRoute>
           } 
@@ -139,7 +144,7 @@ function App() {
         <Route 
           path="/dealer/inventory/:subcategoryId/products/add" 
           element={
-            <ProtectedRoute requiredType="dealer">
+            <ProtectedRoute allowedTypes={['dealer', 'manager']}>
               <AddProduct />
             </ProtectedRoute>
           } 
@@ -148,38 +153,17 @@ function App() {
         <Route 
           path="/dealer/inventory/:subcategoryId/products/:productId" 
           element={
-            <ProtectedRoute requiredType="dealer">
+            <ProtectedRoute allowedTypes={['dealer', 'manager', 'staff']}>
               <ProductDetail />
             </ProtectedRoute>
           } 
         />
+
         <Route
-          path="/dealer/subdealers"
+          path="/dealer/team-members"
           element={
-            <ProtectedRoute requiredType="dealer">
-              <DealerComingSoon
-                title="Sub-Dealers"
-                blurb="Invite sub-dealers, define permissions, and keep channel relationships neatly organized."
-              />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dealer/analytics"
-          element={
-            <ProtectedRoute requiredType="dealer">
-              <DealerComingSoon
-                title="Analytics"
-                blurb="Track sell-through, stock movement, and top-performing categories with actionable insights."
-              />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dealer/profile"
-          element={
-            <ProtectedRoute requiredType="dealer">
-              <DealerProfile />
+            <ProtectedRoute allowedTypes={['dealer']}>
+              <TeamMembersPage />
             </ProtectedRoute>
           }
         />
