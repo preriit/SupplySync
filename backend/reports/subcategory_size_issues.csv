@@ -1,0 +1,24 @@
+issue,subcategory_id,subcategory_name,size_text,size_id,reason
+missing_size_id,9a473641-122b-598e-90b4-8d761e949027,10x10 DOUBLE CHARGE,10x10,,size_id is NULL
+missing_size_id,8e747c0a-a599-5181-bb4e-886ff86aa3ae,12x24 DOUBLE CHARGE,12x24,,size_id is NULL
+missing_size_id,80d09f13-5bfd-5e64-960a-f826341381ab,10x10 GVT/PGVT,10x10,,size_id is NULL
+missing_size_id,410e0345-0e93-58bc-bb33-e1cce4c298f2,10x12 NANO,10x12,,size_id is NULL
+missing_size_id,d5dbc2ba-da71-583d-96ab-1bf347a1dd0e,12x18 DOUBLE CHARGE,12x18,,size_id is NULL
+missing_size_id,7ecfa39f-e5fc-5b37-8561-a83cb291c11f,16x16 DOUBLE CHARGE,16x16,,size_id is NULL
+missing_size_id,7aabf958-a2d5-5f9d-bcb6-ddd2a2c948d2,24x24 NANO,24x24,,size_id is NULL
+missing_size_id,ca106a0e-e782-5955-bb43-c6a8a7e69b9d,32x64 DIGITAL PARKING,32x64,,size_id is NULL
+missing_size_id,5e2fd084-dadb-5914-b848-174e837ebca6,16x16 PLANKS,16x16,,size_id is NULL
+missing_size_id,abcdb4c7-6986-5a43-a53a-762811073d2d,32x64 PLANKS,32x64,,size_id is NULL
+missing_size_id,cf8d712e-9197-5d16-a34c-ce0f71fb2828,24x48 DIGITAL,24x48,,size_id is NULL
+missing_size_id,6821b497-f88d-590b-8343-b5b978e10316,10x24 FULL BODY,10x24,,size_id is NULL
+missing_size_id,68655a76-d3c4-5245-8b85-249e8d928197,32x64 FULL BODY,32x64,,size_id is NULL
+missing_size_id,dffdee3e-7ad1-53c8-96f7-3cc4a193f638,10x24 DIGITAL PARKING,10x24,,size_id is NULL
+missing_size_id,0837d5f7-7648-5d95-8ba0-8d6b79435b22,12x24 GVT/PGVT,12x24,,size_id is NULL
+missing_size_id,19652dac-9752-5e2a-91ab-fa21f5545c64,16x32 NANO,16x32,,size_id is NULL
+missing_size_id,d5a5d42b-e573-5d00-9235-031ce9874bf2,12x18 DIGITAL PARKING,12x18,,size_id is NULL
+missing_size_id,04f6ca81-fc97-5a86-bb67-7b02fb8ef392,10x24 NANO,10x24,,size_id is NULL
+missing_size_id,e4192f45-8c46-5357-af56-c2977ab3eaf9,8x40 DIGITAL PARKING,8x40,,size_id is NULL
+missing_size_id,55196769-66b3-5118-811b-9aab6ddd935f,6x24 PLANKS,6x24,,size_id is NULL
+missing_size_id,0c2ac59e-993d-5f83-868c-757585046cbd,24x48 DIGITAL PARKING,24x48,,size_id is NULL
+missing_size_id,b5f55763-c10c-5802-8bb4-799244dc108e,12x18 NANO,12x18,,size_id is NULL
+missing_size_id,9844c494-4abb-5ae7-93d5-e20c02dbc2c3,8x48 HD,8x48,,size_id is NULL

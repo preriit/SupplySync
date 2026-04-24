@@ -18,6 +18,12 @@ from auth import get_password_hash, verify_password, create_access_token, get_cu
 # Create admin router
 admin_router = APIRouter(prefix="/admin", tags=["Admin"])
 
+
+def _coverage_per_pc_from_mm(width_mm: int, height_mm: int) -> tuple[float, float]:
+    sqm = (float(width_mm) * float(height_mm)) / 1_000_000.0
+    sqft = sqm * 10.764
+    return sqm, sqft
+
 # =====================================================
 # Pydantic Models
 # =====================================================
@@ -535,7 +541,20 @@ class ReferenceDataItem(BaseModel):
     name: str
     display_order: Optional[int] = 0
     body_type_id: Optional[str] = None  # For make_types and sizes
-    
+
+
+class ReferenceDataUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    display_order: Optional[int] = None
+    body_type_id: Optional[str] = None
+    width_inches: Optional[int] = None
+    width_mm: Optional[int] = None
+    height_inches: Optional[int] = None
+    height_mm: Optional[int] = None
+    default_packaging_per_box: Optional[int] = None
+    application_type_id: Optional[str] = None
+
+
 class SizeCreateRequest(BaseModel):
     width_inches: int
     width_mm: int
@@ -544,6 +563,26 @@ class SizeCreateRequest(BaseModel):
     default_packaging_per_box: int
     application_type_id: str
     body_type_id: str
+
+
+def _propagate_size_to_subcategories_and_products(db: Session, size_obj: Size) -> None:
+    linked_subcategories = db.query(SubCategory).filter(SubCategory.size_id == size_obj.id).all()
+    for subcat in linked_subcategories:
+        subcat.size = f"{size_obj.height_inches}x{size_obj.width_inches}"
+        subcat.height_inches = size_obj.height_inches
+        subcat.width_inches = size_obj.width_inches
+        subcat.height_mm = size_obj.height_mm
+        subcat.width_mm = size_obj.width_mm
+        subcat.default_packing_per_box = size_obj.default_packaging_per_box
+        subcat.coverage_per_pc_sqm = size_obj.coverage_per_pc_sqm
+        subcat.coverage_per_pc_sqft = size_obj.coverage_per_pc_sqft
+
+        products = db.query(Product).filter(Product.sub_category_id == subcat.id).all()
+        for product in products:
+            product.coverage_per_pc_sqm = size_obj.coverage_per_pc_sqm
+            product.coverage_per_pc_sqft = size_obj.coverage_per_pc_sqft
+            product.coverage_per_box_sqm = float(size_obj.coverage_per_pc_sqm) * float(product.packing_per_box)
+            product.coverage_per_box_sqft = float(size_obj.coverage_per_pc_sqft) * float(product.packing_per_box)
 
 @admin_router.get("/reference-data/summary")
 async def get_reference_data_summary(
@@ -636,17 +675,21 @@ async def create_reference_data_item(
         raise HTTPException(status_code=400, detail="Invalid data type")
     
     model = type_map[data_type]
-    
-    # Check if item exists (active or inactive)
-    existing = db.query(model).filter(model.name == item.name).first()
+    cleaned_name = (item.name or "").strip()
+    if not cleaned_name:
+        raise HTTPException(status_code=400, detail="Name cannot be empty")
+
+    # Case-insensitive duplicate check (active or inactive).
+    existing = db.query(model).filter(func.lower(model.name) == cleaned_name.lower()).first()
     
     if existing:
         if existing.is_active:
             # Already exists and active
-            raise HTTPException(status_code=400, detail=f"{item.name} already exists and is active")
+            raise HTTPException(status_code=400, detail=f"{cleaned_name} already exists and is active")
         else:
             # Exists but inactive - reactivate it
             existing.is_active = True
+            existing.name = cleaned_name
             if data_type == "make_types" and item.body_type_id:
                 existing.body_type_id = item.body_type_id
             existing.display_order = item.display_order
@@ -654,7 +697,7 @@ async def create_reference_data_item(
             db.refresh(existing)
             
             return {
-                "message": f"{item.name} reactivated successfully",
+                "message": f"{cleaned_name} reactivated successfully",
                 "id": str(existing.id)
             }
     
@@ -669,14 +712,14 @@ async def create_reference_data_item(
             raise HTTPException(status_code=400, detail="Invalid body_type_id")
         
         new_item = model(
-            name=item.name,
+            name=cleaned_name,
             body_type_id=item.body_type_id,
             display_order=item.display_order,
             is_active=True
         )
     else:
         new_item = model(
-            name=item.name,
+            name=cleaned_name,
             display_order=item.display_order,
             is_active=True
         )
@@ -686,7 +729,7 @@ async def create_reference_data_item(
     db.refresh(new_item)
     
     return {
-        "message": f"{item.name} created successfully",
+        "message": f"{cleaned_name} created successfully",
         "id": str(new_item.id)
     }
 
@@ -722,6 +765,98 @@ async def delete_reference_data_item(
     
     return {"message": "Item deactivated successfully"}
 
+
+@admin_router.put("/reference-data/{data_type}/{item_id}")
+async def update_reference_data_item(
+    data_type: str,
+    item_id: str,
+    payload: ReferenceDataUpdateRequest,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Update an existing reference data item."""
+    type_map = {
+        "body_types": BodyType,
+        "make_types": MakeType,
+        "surface_types": SurfaceType,
+        "application_types": ApplicationType,
+        "quality_types": Quality,
+        "sizes": Size,
+        "categories": Category
+    }
+
+    if data_type not in type_map:
+        raise HTTPException(status_code=400, detail="Invalid data type")
+
+    model = type_map[data_type]
+    item = db.query(model).filter(model.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    if payload.display_order is not None:
+        item.display_order = payload.display_order
+
+    if data_type == "sizes":
+        width_inches = payload.width_inches if payload.width_inches is not None else item.width_inches
+        width_mm = payload.width_mm if payload.width_mm is not None else item.width_mm
+        height_inches = payload.height_inches if payload.height_inches is not None else item.height_inches
+        height_mm = payload.height_mm if payload.height_mm is not None else item.height_mm
+        packaging = payload.default_packaging_per_box if payload.default_packaging_per_box is not None else item.default_packaging_per_box
+
+        if width_inches <= 0 or width_mm <= 0 or height_inches <= 0 or height_mm <= 0 or packaging <= 0:
+            raise HTTPException(status_code=400, detail="Size values and packaging must be greater than 0")
+
+        if payload.application_type_id is not None:
+            app_type = db.query(ApplicationType).filter(ApplicationType.id == payload.application_type_id).first()
+            if not app_type:
+                raise HTTPException(status_code=400, detail="Invalid application_type_id")
+            item.application_type_id = payload.application_type_id
+
+        if payload.body_type_id is not None:
+            body_type = db.query(BodyType).filter(BodyType.id == payload.body_type_id).first()
+            if not body_type:
+                raise HTTPException(status_code=400, detail="Invalid body_type_id")
+            item.body_type_id = payload.body_type_id
+
+        item.width_inches = width_inches
+        item.width_mm = width_mm
+        item.height_inches = height_inches
+        item.height_mm = height_mm
+        item.default_packaging_per_box = packaging
+        cov_sqm, cov_sqft = _coverage_per_pc_from_mm(width_mm, height_mm)
+        item.coverage_per_pc_sqm = cov_sqm
+        item.coverage_per_pc_sqft = cov_sqft
+        item.name = f"{width_inches} x {height_inches}"
+        item.name_mm = f"{width_mm} x {height_mm}"
+        _propagate_size_to_subcategories_and_products(db, item)
+    else:
+        if payload.name is not None:
+            cleaned_name = payload.name.strip()
+            if not cleaned_name:
+                raise HTTPException(status_code=400, detail="Name cannot be empty")
+
+            duplicate = db.query(model).filter(
+                func.lower(model.name) == cleaned_name.lower(),
+                model.id != item.id
+            ).first()
+            if duplicate:
+                raise HTTPException(status_code=400, detail=f"{cleaned_name} already exists")
+            item.name = cleaned_name
+
+        if data_type == "make_types" and payload.body_type_id is not None:
+            body_type = db.query(BodyType).filter(BodyType.id == payload.body_type_id).first()
+            if not body_type:
+                raise HTTPException(status_code=400, detail="Invalid body_type_id")
+            item.body_type_id = payload.body_type_id
+
+    db.commit()
+    db.refresh(item)
+
+    return {
+        "message": "Item updated successfully",
+        "id": str(item.id)
+    }
+
 # =====================================================
 # Size Management Routes (Special handling)
 # =====================================================
@@ -747,6 +882,7 @@ async def create_size(
     # Generate names
     name_inches = f"{size_data.width_inches} x {size_data.height_inches}"
     name_mm = f"{size_data.width_mm} x {size_data.height_mm}"
+    coverage_per_pc_sqm, coverage_per_pc_sqft = _coverage_per_pc_from_mm(size_data.width_mm, size_data.height_mm)
     
     # Check if size with same name already exists (active or inactive)
     existing = db.query(Size).filter(Size.name == name_inches).first()
@@ -765,6 +901,9 @@ async def create_size(
             existing.default_packaging_per_box = size_data.default_packaging_per_box
             existing.application_type_id = size_data.application_type_id
             existing.body_type_id = size_data.body_type_id
+            existing.coverage_per_pc_sqm = coverage_per_pc_sqm
+            existing.coverage_per_pc_sqft = coverage_per_pc_sqft
+            _propagate_size_to_subcategories_and_products(db, existing)
             db.commit()
             db.refresh(existing)
             return {
@@ -783,6 +922,8 @@ async def create_size(
         height_inches=size_data.height_inches,
         height_mm=size_data.height_mm,
         default_packaging_per_box=size_data.default_packaging_per_box,
+        coverage_per_pc_sqm=coverage_per_pc_sqm,
+        coverage_per_pc_sqft=coverage_per_pc_sqft,
         application_type_id=size_data.application_type_id,
         body_type_id=size_data.body_type_id,
         is_active=True
@@ -797,7 +938,9 @@ async def create_size(
             "message": f"Size '{name_inches}' created successfully",
             "id": str(new_size.id),
             "name_inches": name_inches,
-            "name_mm": name_mm
+            "name_mm": name_mm,
+            "coverage_per_pc_sqm": coverage_per_pc_sqm,
+            "coverage_per_pc_sqft": coverage_per_pc_sqft
         }
     except Exception as e:
         db.rollback()
@@ -829,6 +972,8 @@ async def get_sizes_detailed(
             "height_inches": size.height_inches,
             "height_mm": size.height_mm,
             "default_packaging_per_box": size.default_packaging_per_box,
+            "coverage_per_pc_sqm": size.coverage_per_pc_sqm,
+            "coverage_per_pc_sqft": size.coverage_per_pc_sqft,
             "application_type_id": str(size.application_type_id) if size.application_type_id else None,
             "application_type_name": app_type.name if app_type else None,
             "body_type_id": str(size.body_type_id) if size.body_type_id else None,

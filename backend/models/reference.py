@@ -1,6 +1,6 @@
 """Reference / lookup tables: body, make, surface, application, quality, tile sizes."""
 
-from sqlalchemy import Column, String, Boolean, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, String, Boolean, Integer, DateTime, ForeignKey, Float
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 
@@ -70,6 +70,8 @@ class Size(Base):
     height_mm = Column(Integer, nullable=False)
     width_mm = Column(Integer, nullable=False)
     default_packaging_per_box = Column(Integer, nullable=False)
+    coverage_per_pc_sqm = Column(Float, nullable=True)
+    coverage_per_pc_sqft = Column(Float, nullable=True)
     application_type_id = Column(UUID(as_uuid=True), ForeignKey("application_types.id"))
     body_type_id = Column(UUID(as_uuid=True), ForeignKey("body_types.id"))
     display_order = Column(Integer, default=0)

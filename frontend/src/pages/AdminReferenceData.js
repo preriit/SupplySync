@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AdminLayout from '../components/AdminLayout';
-import { Database, Plus, Trash2, Package } from 'lucide-react';
+import { Database, Plus, Trash2, Package, Pencil } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,7 +37,10 @@ const AdminReferenceData = () => {
   const [loading, setLoading] = useState(true);
   const summaryRequestId = useRef(0);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [newItemName, setNewItemName] = useState('');
+  const [tempEditMode, setTempEditMode] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
   const [selectedBodyType, setSelectedBodyType] = useState('');
   const [bodyTypes, setBodyTypes] = useState([]);
   const [applicationTypes, setApplicationTypes] = useState([]);
@@ -51,6 +54,17 @@ const AdminReferenceData = () => {
     packagingPerBox: '',
     applicationTypeId: '',
     bodyTypeId: ''
+  });
+  const [editForm, setEditForm] = useState({
+    name: '',
+    displayOrder: '0',
+    bodyTypeId: '',
+    widthInches: '',
+    widthMm: '',
+    heightInches: '',
+    heightMm: '',
+    packagingPerBox: '',
+    applicationTypeId: '',
   });
 
   const dataTypes = [
@@ -269,6 +283,97 @@ const AdminReferenceData = () => {
     }
   };
 
+  const openEditDialog = (item) => {
+    setEditingItem(item);
+    if (selectedType === 'sizes') {
+      setEditForm({
+        name: item.name || '',
+        displayOrder: String(item.display_order ?? 0),
+        bodyTypeId: item.body_type_id || '',
+        widthInches: String(item.width_inches ?? ''),
+        widthMm: String(item.width_mm ?? ''),
+        heightInches: String(item.height_inches ?? ''),
+        heightMm: String(item.height_mm ?? ''),
+        packagingPerBox: String(item.default_packaging_per_box ?? ''),
+        applicationTypeId: item.application_type_id || '',
+      });
+    } else {
+      setEditForm({
+        name: item.name || '',
+        displayOrder: String(item.display_order ?? 0),
+        bodyTypeId: item.body_type_id || '',
+        widthInches: '',
+        widthMm: '',
+        heightInches: '',
+        heightMm: '',
+        packagingPerBox: '',
+        applicationTypeId: '',
+      });
+    }
+    setIsEditDialogOpen(true);
+  };
+
+  const updateItem = async () => {
+    if (!editingItem) return;
+
+    try {
+      const token = localStorage.getItem('admin_token');
+      const payload = {
+        display_order: Number(editForm.displayOrder || 0),
+      };
+
+      if (selectedType === 'sizes') {
+        const widthInches = Number(editForm.widthInches);
+        const widthMm = Number(editForm.widthMm);
+        const heightInches = Number(editForm.heightInches);
+        const heightMm = Number(editForm.heightMm);
+        const packagingPerBox = Number(editForm.packagingPerBox);
+
+        if (
+          [widthInches, widthMm, heightInches, heightMm, packagingPerBox].some(
+            (n) => Number.isNaN(n) || n <= 0
+          )
+        ) {
+          toast.error('All size values must be valid numbers greater than 0');
+          return;
+        }
+        if (!editForm.applicationTypeId || !editForm.bodyTypeId) {
+          toast.error('Application Type and Body Type are required');
+          return;
+        }
+
+        payload.width_inches = widthInches;
+        payload.width_mm = widthMm;
+        payload.height_inches = heightInches;
+        payload.height_mm = heightMm;
+        payload.default_packaging_per_box = packagingPerBox;
+        payload.application_type_id = editForm.applicationTypeId;
+        payload.body_type_id = editForm.bodyTypeId;
+      } else {
+        if (!editForm.name.trim()) {
+          toast.error('Name is required');
+          return;
+        }
+        payload.name = editForm.name.trim();
+        if (selectedType === 'make_types' && editForm.bodyTypeId) {
+          payload.body_type_id = editForm.bodyTypeId;
+        }
+      }
+
+      await api.put(`/admin/reference-data/${selectedType}/${editingItem.id}`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      toast.success('Item updated successfully');
+      setIsEditDialogOpen(false);
+      setEditingItem(null);
+      fetchItems(selectedType);
+      fetchSummary();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update item');
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -330,14 +435,20 @@ const AdminReferenceData = () => {
                         Manage {dataTypes.find(t => t.key === selectedType)?.label.toLowerCase()}
                       </CardDescription>
                     </div>
-                    
-                    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button className="bg-orange hover:bg-orange-dark">
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add New
-                        </Button>
-                      </DialogTrigger>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant={tempEditMode ? 'destructive' : 'outline'}
+                        onClick={() => setTempEditMode((prev) => !prev)}
+                      >
+                        {tempEditMode ? 'Disable Temp Edit' : 'Enable Temp Edit'}
+                      </Button>
+                      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button className="bg-orange hover:bg-orange-dark">
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add New
+                          </Button>
+                        </DialogTrigger>
                       <DialogContent className="bg-slate-800 border-slate-700 max-w-2xl">
                         <DialogHeader>
                           <DialogTitle className="text-white">
@@ -473,9 +584,15 @@ const AdminReferenceData = () => {
                           </Button>
                         </div>
                         )}
-                      </DialogContent>
-                    </Dialog>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
                   </div>
+                  {tempEditMode && (
+                    <p className="text-xs text-amber-300 mt-2">
+                      Temporary edit mode is ON. Changes here affect live reference data.
+                    </p>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
@@ -501,6 +618,14 @@ const AdminReferenceData = () => {
                             <Button
                               size="sm"
                               variant="ghost"
+                              onClick={() => openEditDialog(item)}
+                              className={`text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 ml-2 ${tempEditMode ? '' : 'hidden'}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
                               onClick={() => deleteItem(item.id)}
                               className="text-red-400 hover:text-red-300 hover:bg-red-500/10 ml-2"
                             >
@@ -514,6 +639,104 @@ const AdminReferenceData = () => {
                 </CardContent>
               </Card>
             )}
+            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+              <DialogContent className="bg-slate-800 border-slate-700 max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle className="text-white">Edit {dataTypes.find(t => t.key === selectedType)?.label?.slice(0, -1)}</DialogTitle>
+                  <DialogDescription className="text-slate-400">
+                    Temporary admin edit mode for reference data.
+                  </DialogDescription>
+                </DialogHeader>
+                {selectedType === 'sizes' ? (
+                  <div className="space-y-4 py-2 max-h-96 overflow-y-auto">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-slate-200">Width (Inches)</Label>
+                        <Input type="number" min="1" value={editForm.widthInches} onChange={(e) => setEditForm({ ...editForm, widthInches: e.target.value })} className="bg-slate-900 border-slate-600 text-white" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-slate-200">Width (MM)</Label>
+                        <Input type="number" min="1" value={editForm.widthMm} onChange={(e) => setEditForm({ ...editForm, widthMm: e.target.value })} className="bg-slate-900 border-slate-600 text-white" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-slate-200">Height (Inches)</Label>
+                        <Input type="number" min="1" value={editForm.heightInches} onChange={(e) => setEditForm({ ...editForm, heightInches: e.target.value })} className="bg-slate-900 border-slate-600 text-white" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-slate-200">Height (MM)</Label>
+                        <Input type="number" min="1" value={editForm.heightMm} onChange={(e) => setEditForm({ ...editForm, heightMm: e.target.value })} className="bg-slate-900 border-slate-600 text-white" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-slate-200">Packaging Per Box</Label>
+                        <Input type="number" min="1" value={editForm.packagingPerBox} onChange={(e) => setEditForm({ ...editForm, packagingPerBox: e.target.value })} className="bg-slate-900 border-slate-600 text-white" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-slate-200">Display Order</Label>
+                        <Input type="number" value={editForm.displayOrder} onChange={(e) => setEditForm({ ...editForm, displayOrder: e.target.value })} className="bg-slate-900 border-slate-600 text-white" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-slate-200">Application Type</Label>
+                      <Select value={editForm.applicationTypeId} onValueChange={(value) => setEditForm({ ...editForm, applicationTypeId: value })}>
+                        <SelectTrigger className="bg-slate-900 border-slate-600 text-white">
+                          <SelectValue placeholder="Select application type..." />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-800 border-slate-700">
+                          {applicationTypes.map((type) => (
+                            <SelectItem key={type.id} value={type.id} className="text-white">{type.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-slate-200">Body Type</Label>
+                      <Select value={editForm.bodyTypeId} onValueChange={(value) => setEditForm({ ...editForm, bodyTypeId: value })}>
+                        <SelectTrigger className="bg-slate-900 border-slate-600 text-white">
+                          <SelectValue placeholder="Select body type..." />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-800 border-slate-700">
+                          {bodyTypes.map((type) => (
+                            <SelectItem key={type.id} value={type.id} className="text-white">{type.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button onClick={updateItem} className="w-full bg-orange hover:bg-orange-dark">Save Changes</Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4 py-2">
+                    <div className="space-y-2">
+                      <Label className="text-slate-200">Name</Label>
+                      <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="bg-slate-900 border-slate-600 text-white" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-slate-200">Display Order</Label>
+                      <Input type="number" value={editForm.displayOrder} onChange={(e) => setEditForm({ ...editForm, displayOrder: e.target.value })} className="bg-slate-900 border-slate-600 text-white" />
+                    </div>
+                    {selectedType === 'make_types' && (
+                      <div className="space-y-2">
+                        <Label className="text-slate-200">Body Type</Label>
+                        <Select value={editForm.bodyTypeId} onValueChange={(value) => setEditForm({ ...editForm, bodyTypeId: value })}>
+                          <SelectTrigger className="bg-slate-900 border-slate-600 text-white">
+                            <SelectValue placeholder="Select body type..." />
+                          </SelectTrigger>
+                          <SelectContent className="bg-slate-800 border-slate-700">
+                            {bodyTypes.map((type) => (
+                              <SelectItem key={type.id} value={type.id} className="text-white">{type.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    <Button onClick={updateItem} className="w-full bg-orange hover:bg-orange-dark">Save Changes</Button>
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
           </>
         )}
       </div>

@@ -232,6 +232,16 @@ def _is_rate_limited(key: str, max_attempts: int, window_seconds: int) -> bool:
         _RATE_LIMIT_BUCKETS[key] = attempts
         return False
 
+
+def _coverage_per_pc_from_mm(width_mm: int, height_mm: int) -> tuple[float, float]:
+    sqm = (float(width_mm) * float(height_mm)) / 1_000_000.0
+    sqft = sqm * 10.764
+    return sqm, sqft
+
+
+def _normalized_size_token(size_value: str) -> str:
+    return (size_value or "").replace('"', "").replace(" ", "").lower()
+
 # Auth Routes
 @api_router.post("/auth/login", response_model=LoginResponse)
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
@@ -850,6 +860,10 @@ async def get_products_in_subcategory(
             "quality": quality.name if quality else "",
             "current_quantity": product.current_quantity,
             "packing_per_box": product.packing_per_box,
+            "coverage_per_pc_sqm": product.coverage_per_pc_sqm,
+            "coverage_per_pc_sqft": product.coverage_per_pc_sqft,
+            "coverage_per_box_sqm": product.coverage_per_box_sqm,
+            "coverage_per_box_sqft": product.coverage_per_box_sqft,
             "primary_image_url": product.primary_image_url
         })
     
@@ -860,6 +874,8 @@ async def get_products_in_subcategory(
             "size": subcat.size,
             "size_display": f"{subcat.height_inches}\" x {subcat.width_inches}\"",
             "size_mm": f"{subcat.height_mm}mm x {subcat.width_mm}mm",
+            "coverage_per_pc_sqm": subcat.coverage_per_pc_sqm,
+            "coverage_per_pc_sqft": subcat.coverage_per_pc_sqft,
             "make_type": make_type.name if make_type else ""
         },
         "products": product_list
@@ -900,6 +916,20 @@ async def create_product(
             detail=f"Product '{request['brand']} {request['name']}' already exists in this category"
         )
     
+    subcat = db.query(SubCategory).filter(SubCategory.id == request['sub_category_id']).first()
+    if not subcat:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid sub_category_id"
+        )
+
+    cov_sqm = subcat.coverage_per_pc_sqm
+    cov_sqft = subcat.coverage_per_pc_sqft
+    if cov_sqm is None or cov_sqft is None:
+        cov_sqm, cov_sqft = _coverage_per_pc_from_mm(subcat.width_mm, subcat.height_mm)
+    box_cov_sqm = float(cov_sqm) * float(request['packing_per_box'])
+    box_cov_sqft = float(cov_sqft) * float(request['packing_per_box'])
+
     # Create product
     new_product = Product(
         merchant_id=current_user.merchant_id,
@@ -913,6 +943,10 @@ async def create_product(
         quality_id=request['quality_id'],
         current_quantity=request['current_quantity'],
         packing_per_box=request['packing_per_box'],
+        coverage_per_pc_sqm=cov_sqm,
+        coverage_per_pc_sqft=cov_sqft,
+        coverage_per_box_sqm=box_cov_sqm,
+        coverage_per_box_sqft=box_cov_sqft,
         primary_image_url=request.get('primary_image_url'),
         is_active=True
     )
@@ -988,6 +1022,10 @@ async def get_product_detail(
             "quality": quality.name if quality else "",
             "current_quantity": product.current_quantity,
             "packing_per_box": product.packing_per_box,
+            "coverage_per_pc_sqm": product.coverage_per_pc_sqm,
+            "coverage_per_pc_sqft": product.coverage_per_pc_sqft,
+            "coverage_per_box_sqm": product.coverage_per_box_sqm,
+            "coverage_per_box_sqft": product.coverage_per_box_sqft,
             "primary_image_url": product.primary_image_url,
             "is_active": product.is_active,
             "created_at": product.created_at.isoformat() if product.created_at else None,
@@ -1068,6 +1106,18 @@ async def update_product(
         changes_made.append({"field": "packing_per_box", "old_value": f"{product.packing_per_box} pieces", "new_value": f"{request['packing_per_box']} pieces"})
         product.packing_per_box = request['packing_per_box']
     
+    # Keep product coverage in sync with subcategory dimensions and packing.
+    subcat = db.query(SubCategory).filter(SubCategory.id == product.sub_category_id).first()
+    if subcat:
+        cov_sqm = subcat.coverage_per_pc_sqm
+        cov_sqft = subcat.coverage_per_pc_sqft
+        if cov_sqm is None or cov_sqft is None:
+            cov_sqm, cov_sqft = _coverage_per_pc_from_mm(subcat.width_mm, subcat.height_mm)
+        product.coverage_per_pc_sqm = cov_sqm
+        product.coverage_per_pc_sqft = cov_sqft
+        product.coverage_per_box_sqm = float(cov_sqm) * float(product.packing_per_box)
+        product.coverage_per_box_sqft = float(cov_sqft) * float(product.packing_per_box)
+
     # Update timestamp
     from datetime import datetime, timezone
     product.updated_at = datetime.now(timezone.utc)
@@ -1388,6 +1438,31 @@ async def create_subcategory(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid size format. Use format like '12x12'"
         )
+
+    # Try to link with admin-managed size reference for authoritative dimensions/coverage.
+    normalized_size = _normalized_size_token(size)
+    size_ref = db.query(Size).filter(Size.is_active == True).all()
+    matched_size = None
+    for candidate in size_ref:
+        candidate_norm = _normalized_size_token(candidate.name)
+        if candidate_norm == normalized_size:
+            matched_size = candidate
+            break
+        if candidate.height_inches == height_inches and candidate.width_inches == width_inches:
+            matched_size = candidate
+            break
+
+    if matched_size:
+        height_inches = matched_size.height_inches
+        width_inches = matched_size.width_inches
+        height_mm = matched_size.height_mm
+        width_mm = matched_size.width_mm
+        cov_sqm = matched_size.coverage_per_pc_sqm
+        cov_sqft = matched_size.coverage_per_pc_sqft
+        if cov_sqm is None or cov_sqft is None:
+            cov_sqm, cov_sqft = _coverage_per_pc_from_mm(width_mm, height_mm)
+    else:
+        cov_sqm, cov_sqft = _coverage_per_pc_from_mm(width_mm, height_mm)
     
     # Check if sub-category already exists
     existing = db.query(SubCategory).filter(
@@ -1397,6 +1472,12 @@ async def create_subcategory(
     ).first()
     
     if existing:
+        if matched_size and existing.size_id != matched_size.id:
+            existing.size_id = matched_size.id
+        if existing.coverage_per_pc_sqm is None or existing.coverage_per_pc_sqft is None:
+            existing.coverage_per_pc_sqm = cov_sqm
+            existing.coverage_per_pc_sqft = cov_sqft
+        db.commit()
         return {
             "exists": True,
             "message": f"Sub-category '{existing.name}' already exists",
@@ -1419,6 +1500,9 @@ async def create_subcategory(
         width_inches=width_inches,
         height_mm=height_mm,
         width_mm=width_mm,
+        size_id=matched_size.id if matched_size else None,
+        coverage_per_pc_sqm=cov_sqm,
+        coverage_per_pc_sqft=cov_sqft,
         make_type_id=make_type_id,
         default_packing_per_box=10
     )
@@ -1451,7 +1535,9 @@ async def get_tile_sizes(db: Session = Depends(get_db)):
                 "height_inches": size.height_inches,
                 "width_inches": size.width_inches,
                 "height_mm": size.height_mm,
-                "width_mm": size.width_mm
+                "width_mm": size.width_mm,
+                "coverage_per_pc_sqm": size.coverage_per_pc_sqm,
+                "coverage_per_pc_sqft": size.coverage_per_pc_sqft
             }
             for size in sizes
         ]

@@ -24,6 +24,7 @@ SQL_FILES = [
     "add_subcategory_size_id.sql",  # sub_categories.size_id -> sizes
     "add_subcategory_application_body.sql",  # application_type_id, body_type_id; make_type_id nullable
     "add_coverage_fields.sql",  # subcategory + product coverage (sq m / sq ft)
+    "add_size_coverage_fields.sql",  # sizes coverage (sq m / sq ft)
     "add_snapshot_label_columns.sql",  # denormalized labels on products + sub_categories
     "add_transactions_table.sql",
     "add_product_images_table.sql",

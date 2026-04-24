@@ -11,7 +11,8 @@ Order:
   1. add_subcategory_size_id.sql
   2. add_subcategory_application_body.sql  (application_type_id, body_type_id, …)
   3. add_coverage_fields.sql
-  4. add_snapshot_label_columns.sql  (product/subcategory snapshot labels)
+  4. add_size_coverage_fields.sql
+  5. add_snapshot_label_columns.sql  (product/subcategory snapshot labels)
 """
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ MIGRATION_FILES = [
     "add_subcategory_size_id.sql",
     "add_subcategory_application_body.sql",
     "add_coverage_fields.sql",
+    "add_size_coverage_fields.sql",
     "add_snapshot_label_columns.sql",
 ]
 
