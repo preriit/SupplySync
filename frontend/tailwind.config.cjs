@@ -59,7 +59,6 @@ module.exports = {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
-<<<<<<<< HEAD:frontend/tailwind.config.cjs
         chart: {
           '1': 'hsl(var(--chart-1))',
           '2': 'hsl(var(--chart-2))',
@@ -71,15 +70,12 @@ module.exports = {
       boxShadow: {
         card: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
         'card-hover': '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-========
->>>>>>>> 5b0ab8d (Stabilize production readiness after migration by aligning backend/frontend auth, role access, and operational tooling.):frontend/tailwind.config.js
       },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
       },
-<<<<<<<< HEAD:frontend/tailwind.config.cjs
       keyframes: {
         'accordion-down': {
           from: { height: '0' },
@@ -94,8 +90,6 @@ module.exports = {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
       },
-========
->>>>>>>> 5b0ab8d (Stabilize production readiness after migration by aligning backend/frontend auth, role access, and operational tooling.):frontend/tailwind.config.js
     },
   },
   plugins: [require('tailwindcss-animate')],
