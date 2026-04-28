@@ -22,6 +22,7 @@ from models import (
 )
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from typing import List
 
 ROOT_DIR = Path(__file__).parent
@@ -104,11 +105,21 @@ class UserResponse(BaseModel):
 
 
 class TeamMemberCreateRequest(BaseModel):
-    username: str
-    email: EmailStr
+    name: Optional[str] = None
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
     phone: Optional[str] = None
-    password: str
-    user_type: str = "staff"
+    password: Optional[str] = None
+    user_type: Optional[str] = "staff"
+
+
+class TeamMemberUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    user_type: Optional[str] = "staff"
+    is_active: Optional[bool] = None
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -166,6 +177,70 @@ def require_dealer_team_management_access(current_user: User) -> None:
 
 def _password_fingerprint(password_hash: str) -> str:
     return hashlib.sha256(password_hash.encode("utf-8")).hexdigest()[:24]
+
+
+def _team_member_integrity_error_detail(error: IntegrityError) -> str:
+    raw = str(getattr(error, "orig", error)).lower()
+    if "users_phone" in raw:
+        return "Cannot save: mobile number already exists in another record."
+    if "users_username" in raw:
+        return "Cannot save: username already exists in another record."
+    if "users_email" in raw:
+        return "Cannot save: email already exists in another record."
+    return "Cannot save due to duplicate data in another record."
+
+
+def _upsert_member_by_mobile(
+    db: Session,
+    current_user: User,
+    normalized_phone: str,
+    normalized_name: str,
+    member_email: str,
+    requested_type: str,
+    password_hash: str
+) -> tuple[User, bool]:
+    """Return (member, created_new). Reuse existing inactive identity when possible."""
+    existing_phone_user = db.query(User).filter(User.phone == normalized_phone).first()
+
+    if existing_phone_user:
+        if existing_phone_user.is_active:
+            if existing_phone_user.merchant_id == current_user.merchant_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This mobile number is already active in your team."
+                )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Mobile number is already active with another employer. Ask previous employer to deactivate first."
+            )
+
+        existing_phone_user.business_name = normalized_name
+        existing_phone_user.username = normalized_phone
+        existing_phone_user.email = member_email
+        existing_phone_user.phone = normalized_phone
+        existing_phone_user.password_hash = password_hash
+        existing_phone_user.user_type = requested_type
+        existing_phone_user.role = requested_type
+        existing_phone_user.merchant_id = current_user.merchant_id
+        existing_phone_user.is_verified = True
+        existing_phone_user.is_active = True
+        existing_phone_user.deleted_at = None
+        return existing_phone_user, False
+
+    new_member = User(
+        business_name=normalized_name,
+        username=normalized_phone,
+        email=member_email,
+        phone=normalized_phone,
+        password_hash=password_hash,
+        user_type=requested_type,
+        merchant_id=current_user.merchant_id,
+        role=requested_type,
+        is_verified=True,
+        is_active=True
+    )
+    db.add(new_member)
+    return new_member, True
 
 
 def _build_password_reset_token(user: User) -> str:
@@ -560,6 +635,7 @@ async def get_team_members(
         "team_members": [
             {
                 "id": str(member.id),
+                "name": member.business_name,
                 "username": member.username,
                 "email": member.email,
                 "phone": member.phone,
@@ -581,51 +657,71 @@ async def create_team_member(
     """Create a team member and force-link it to dealer's merchant."""
     require_dealer_team_management_access(current_user)
 
-    requested_type = (request.user_type or "staff").strip().lower()
+    if request.user_type is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Role is required"
+        )
+    requested_type = request.user_type.strip().lower()
     if requested_type not in {"staff", "manager"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="user_type must be 'staff' or 'manager'"
         )
 
-    if db.query(User).filter(User.email == request.email).first():
+    normalized_phone = request.phone.strip() if request.phone else None
+    if not normalized_phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mobile number is required"
+        )
+    normalized_name = request.name.strip() if request.name else ""
+    if not normalized_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Name is required"
+        )
+
+    normalized_username = normalized_phone
+    normalized_email = request.email.lower().strip() if request.email else None
+
+    if normalized_email and db.query(User).filter(User.email == normalized_email).first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
 
-    if db.query(User).filter(User.username == request.username).first():
+    if not request.password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already taken"
+            detail="Password is required"
         )
 
-    normalized_phone = request.phone.strip() if request.phone else None
-    if normalized_phone and db.query(User).filter(User.phone == normalized_phone).first():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Phone number already registered"
-        )
-
-    new_member = User(
-        username=request.username.strip(),
-        email=request.email.lower().strip(),
-        phone=normalized_phone or None,
+    member_email = normalized_email or f"{normalized_phone}@noemail.local"
+    new_member, _created_new = _upsert_member_by_mobile(
+        db=db,
+        current_user=current_user,
+        normalized_phone=normalized_phone,
+        normalized_name=normalized_name,
+        member_email=member_email,
+        requested_type=requested_type,
         password_hash=get_password_hash(request.password),
-        user_type=requested_type,
-        merchant_id=current_user.merchant_id,
-        role=requested_type,
-        is_verified=True,
-        is_active=True
     )
-    db.add(new_member)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_team_member_integrity_error_detail(exc)
+        )
     db.refresh(new_member)
 
     return {
         "message": "Team member created successfully",
         "team_member": {
             "id": str(new_member.id),
+            "name": new_member.business_name,
             "username": new_member.username,
             "email": new_member.email,
             "phone": new_member.phone,
@@ -634,6 +730,137 @@ async def create_team_member(
             "is_active": new_member.is_active,
         }
     }
+
+
+@api_router.put("/dealer/team-members/{member_id}")
+async def update_team_member(
+    member_id: str,
+    request: TeamMemberUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a team member linked to dealer's merchant."""
+    require_dealer_team_management_access(current_user)
+
+    if request.user_type is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Role is required"
+        )
+    requested_type = request.user_type.strip().lower()
+    if requested_type not in {"staff", "manager"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="user_type must be 'staff' or 'manager'"
+        )
+
+    normalized_phone = request.phone.strip() if request.phone else ""
+    if not normalized_phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mobile number is required"
+        )
+    normalized_name = request.name.strip() if request.name else ""
+    if not normalized_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Name is required"
+        )
+    if request.is_active is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Status is required"
+        )
+
+    normalized_email = request.email.lower().strip() if request.email else None
+    normalized_username = normalized_phone
+
+    try:
+        member_uuid = uuid.UUID(member_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid team member id"
+        ) from exc
+
+    member = db.query(User).filter(
+        User.id == member_uuid,
+        User.merchant_id == current_user.merchant_id,
+        User.user_type.in_(["staff", "manager"]),
+        User.deleted_at.is_(None)
+    ).first()
+
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team member not found"
+        )
+
+    if normalized_email and db.query(User).filter(User.email == normalized_email, User.id != member.id).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+
+    conflicting_phone_user = db.query(User).filter(
+        User.phone == normalized_phone,
+        User.id != member.id
+    ).first()
+    if conflicting_phone_user:
+        if conflicting_phone_user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Mobile number is already active with another staff record."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This mobile number belongs to an inactive staff record. Use Add Team Member to reactivate and reassign it."
+        )
+
+    member.username = normalized_username
+    member.business_name = normalized_name
+    member.phone = normalized_phone
+    member.user_type = requested_type
+    member.role = requested_type
+    if normalized_email:
+        member.email = normalized_email
+    if request.is_active is not None:
+        member.is_active = request.is_active
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_team_member_integrity_error_detail(exc)
+        )
+    db.refresh(member)
+
+    return {
+        "message": "Team member updated successfully",
+        "team_member": {
+            "id": str(member.id),
+            "name": member.business_name,
+            "username": member.username,
+            "email": member.email,
+            "phone": member.phone,
+            "user_type": member.user_type,
+            "merchant_id": str(member.merchant_id) if member.merchant_id else None,
+            "is_active": member.is_active,
+        }
+    }
+
+
+@api_router.post("/dealer/team-members/{member_id}/update")
+async def update_team_member_via_post(
+    member_id: str,
+    request: TeamMemberUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """POST alias for environments where PUT may be blocked."""
+    return await update_team_member(member_id, request, current_user, db)
 
 # Dashboard Routes
 @api_router.get("/dealer/dashboard/stats")
