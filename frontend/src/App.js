@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, matchPath } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import SignUpPage from './pages/SignUpPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
@@ -11,6 +11,7 @@ import ProductsList from './pages/ProductsList';
 import AddProduct from './pages/AddProduct';
 import ProductDetail from './pages/ProductDetail';
 import TeamMembersPage from './pages/TeamMembersPage';
+import DealerComingSoon from './pages/DealerComingSoon';
 
 // Admin Pages
 import AdminLogin from './pages/AdminLogin';
@@ -50,9 +51,49 @@ const AdminProtectedRoute = ({ children }) => {
   return children;
 };
 
+const PAGE_TITLE_BY_ROUTE = [
+  { path: '/login', title: 'Login' },
+  { path: '/signup', title: 'Sign Up' },
+  { path: '/forgot-password', title: 'Forgot Password' },
+  { path: '/reset-password/:token', title: 'Reset Password' },
+  { path: '/reset-password', title: 'Reset Password' },
+  { path: '/admin/login', title: 'Admin Login' },
+  { path: '/admin/dashboard', title: 'Admin Dashboard' },
+  { path: '/admin/users', title: 'Admin Users' },
+  { path: '/admin/merchants', title: 'Admin Merchants' },
+  { path: '/admin/reference-data', title: 'Admin Reference Data' },
+  { path: '/admin/analytics', title: 'Admin Analytics' },
+  { path: '/dealer/dashboard', title: 'Dashboard' },
+  { path: '/dealer/inventory', title: 'Inventory' },
+  { path: '/dealer/inventory/add-category', title: 'Add Category' },
+  { path: '/dealer/inventory/:subcategoryId/products', title: 'Products' },
+  { path: '/dealer/inventory/:subcategoryId/products/add', title: 'Add Product' },
+  { path: '/dealer/inventory/:subcategoryId/products/:productId', title: 'Product Details' },
+  { path: '/dealer/team-members', title: 'Team Members' },
+  { path: '/dealer/analytics', title: 'Analytics' },
+];
+
+const getDocumentTitleForPath = (pathname) => {
+  const matched = PAGE_TITLE_BY_ROUTE.find((route) =>
+    matchPath({ path: route.path, end: true }, pathname)
+  );
+  return `Supply Sync | ${matched?.title || 'App'}`;
+};
+
+const DocumentTitleManager = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    document.title = getDocumentTitleForPath(location.pathname);
+  }, [location.pathname]);
+
+  return null;
+};
+
 function App() {
   return (
     <Router>
+      <DocumentTitleManager />
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={<LoginPage />} />
@@ -164,6 +205,18 @@ function App() {
           element={
             <ProtectedRoute allowedTypes={['dealer']}>
               <TeamMembersPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/dealer/analytics"
+          element={
+            <ProtectedRoute allowedTypes={['dealer', 'manager', 'staff']}>
+              <DealerComingSoon
+                title="Analytics Is Brewing"
+                blurb="Your numbers are in the lab. Dashboards are coming soon."
+              />
             </ProtectedRoute>
           }
         />

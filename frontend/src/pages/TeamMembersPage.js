@@ -7,6 +7,21 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import api from '../utils/api';
 
+const INITIAL_CREATE_FORM = {
+  name: '',
+  email: '',
+  phone: '',
+  user_type: 'staff',
+};
+
+const INITIAL_EDIT_FORM = {
+  name: '',
+  email: '',
+  phone: '',
+  user_type: 'staff',
+  is_active: true,
+};
+
 const TeamMembersPage = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -15,19 +30,8 @@ const TeamMembersPage = () => {
   const [updateError, setUpdateError] = useState('');
   const [members, setMembers] = useState([]);
   const [editingMemberId, setEditingMemberId] = useState(null);
-  const [editFormData, setEditFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    user_type: 'staff',
-    is_active: true,
-  });
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    user_type: 'staff',
-  });
+  const [editFormData, setEditFormData] = useState(INITIAL_EDIT_FORM);
+  const [formData, setFormData] = useState(INITIAL_CREATE_FORM);
 
   const getErrorMessage = (error, fallback) => {
     const normalizeMessage = (message) => {
@@ -71,6 +75,14 @@ const TeamMembersPage = () => {
     }
   }, [toast]);
 
+  const updateCreateField = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updateEditField = (field, value) => {
+    setEditFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
   useEffect(() => {
     fetchMembers();
   }, [fetchMembers]);
@@ -111,12 +123,7 @@ const TeamMembersPage = () => {
         title: 'Team member added',
         description: 'New team member is linked to your merchant',
       });
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        user_type: 'staff',
-      });
+      setFormData(INITIAL_CREATE_FORM);
       fetchMembers();
     } catch (error) {
       toast({
@@ -133,6 +140,7 @@ const TeamMembersPage = () => {
     setUpdateError('');
     setEditingMemberId(member.id);
     setEditFormData({
+      ...INITIAL_EDIT_FORM,
       name: member.name || '',
       email: member.email || '',
       phone: member.phone || '',
@@ -144,13 +152,7 @@ const TeamMembersPage = () => {
   const cancelEditing = () => {
     setUpdateError('');
     setEditingMemberId(null);
-    setEditFormData({
-      name: '',
-      email: '',
-      phone: '',
-      user_type: 'staff',
-      is_active: true,
-    });
+    setEditFormData(INITIAL_EDIT_FORM);
   };
 
   const handleSaveEdit = async (memberId) => {
@@ -258,7 +260,7 @@ const TeamMembersPage = () => {
                 <Input
                   id="tm_name"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => updateCreateField('name', e.target.value)}
                   required
                 />
               </div>
@@ -268,7 +270,7 @@ const TeamMembersPage = () => {
                   id="tm_email"
                   type="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  onChange={(e) => updateCreateField('email', e.target.value)}
                 />
               </div>
               <div>
@@ -276,7 +278,7 @@ const TeamMembersPage = () => {
                 <Input
                   id="tm_phone"
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  onChange={(e) => updateCreateField('phone', e.target.value)}
                   required
                 />
               </div>
@@ -285,7 +287,7 @@ const TeamMembersPage = () => {
                 <select
                   id="tm_type"
                   value={formData.user_type}
-                  onChange={(e) => setFormData({ ...formData, user_type: e.target.value })}
+                  onChange={(e) => updateCreateField('user_type', e.target.value)}
                   className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
                   <option value="staff">Staff (view only)</option>
@@ -336,7 +338,7 @@ const TeamMembersPage = () => {
                             {isEditing ? (
                               <Input
                                 value={editFormData.name}
-                                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                                onChange={(e) => updateEditField('name', e.target.value)}
                                 required
                               />
                             ) : (
@@ -347,7 +349,7 @@ const TeamMembersPage = () => {
                             {isEditing ? (
                               <Input
                                 value={editFormData.phone}
-                                onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                                onChange={(e) => updateEditField('phone', e.target.value)}
                                 required
                               />
                             ) : (
@@ -359,7 +361,7 @@ const TeamMembersPage = () => {
                               <Input
                                 type="email"
                                 value={editFormData.email}
-                                onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                                onChange={(e) => updateEditField('email', e.target.value)}
                               />
                             ) : (
                               member.email || ''
@@ -369,7 +371,7 @@ const TeamMembersPage = () => {
                             {isEditing ? (
                               <select
                                 value={editFormData.user_type}
-                                onChange={(e) => setEditFormData({ ...editFormData, user_type: e.target.value })}
+                                onChange={(e) => updateEditField('user_type', e.target.value)}
                                 className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                               >
                                 <option value="staff">Staff (view only)</option>
@@ -383,9 +385,7 @@ const TeamMembersPage = () => {
                             {isEditing ? (
                               <select
                                 value={editFormData.is_active ? 'active' : 'inactive'}
-                                onChange={(e) =>
-                                  setEditFormData({ ...editFormData, is_active: e.target.value === 'active' })
-                                }
+                                onChange={(e) => updateEditField('is_active', e.target.value === 'active')}
                                 className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                               >
                                 <option value="active">Active</option>

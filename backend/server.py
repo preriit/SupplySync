@@ -133,6 +133,7 @@ class ResetPasswordRequest(BaseModel):
 
 READ_ONLY_MERCHANT_USER_TYPES = {"dealer", "manager", "staff"}
 INVENTORY_WRITE_USER_TYPES = {"dealer", "manager"}
+TEAM_MEMBER_USER_TYPES = {"staff", "manager"}
 
 
 def require_merchant_read_access(current_user: User) -> None:
@@ -180,6 +181,7 @@ def _password_fingerprint(password_hash: str) -> str:
 
 
 def _team_member_integrity_error_detail(error: IntegrityError) -> str:
+    """Map database integrity errors to user-safe validation messages."""
     raw = str(getattr(error, "orig", error)).lower()
     if "users_phone" in raw:
         return "Cannot save: mobile number already exists in another record."
@@ -199,7 +201,14 @@ def _upsert_member_by_mobile(
     requested_type: str,
     password_hash: str
 ) -> tuple[User, bool]:
-    """Return (member, created_new). Reuse existing inactive identity when possible."""
+    """
+    Return (member, created_new) for team-member onboarding.
+
+    Identity is mobile-first: one user identity per mobile number.
+    - Active mobile in same merchant => conflict.
+    - Active mobile in another merchant => conflict.
+    - Inactive mobile => reactivate and reassign same identity.
+    """
     existing_phone_user = db.query(User).filter(User.phone == normalized_phone).first()
 
     if existing_phone_user:
@@ -254,6 +263,21 @@ def _build_password_reset_token(user: User) -> str:
         "exp": expire,
     }
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def _normalize_team_member_type(user_type: Optional[str]) -> str:
+    if user_type is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Role is required"
+        )
+    normalized_type = user_type.strip().lower()
+    if normalized_type not in TEAM_MEMBER_USER_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="user_type must be 'staff' or 'manager'"
+        )
+    return normalized_type
 
 
 def _decode_password_reset_token(token: str) -> dict:
@@ -657,17 +681,7 @@ async def create_team_member(
     """Create a team member and force-link it to dealer's merchant."""
     require_dealer_team_management_access(current_user)
 
-    if request.user_type is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Role is required"
-        )
-    requested_type = request.user_type.strip().lower()
-    if requested_type not in {"staff", "manager"}:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="user_type must be 'staff' or 'manager'"
-        )
+    requested_type = _normalize_team_member_type(request.user_type)
 
     normalized_phone = request.phone.strip() if request.phone else None
     if not normalized_phone:
@@ -682,7 +696,6 @@ async def create_team_member(
             detail="Name is required"
         )
 
-    normalized_username = normalized_phone
     normalized_email = request.email.lower().strip() if request.email else None
 
     if normalized_email and db.query(User).filter(User.email == normalized_email).first():
@@ -697,6 +710,7 @@ async def create_team_member(
             detail="Password is required"
         )
 
+    # Optional email is allowed in UI, but users.email is non-null in DB.
     member_email = normalized_email or f"{normalized_phone}@noemail.local"
     new_member, _created_new = _upsert_member_by_mobile(
         db=db,
@@ -742,17 +756,7 @@ async def update_team_member(
     """Update a team member linked to dealer's merchant."""
     require_dealer_team_management_access(current_user)
 
-    if request.user_type is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Role is required"
-        )
-    requested_type = request.user_type.strip().lower()
-    if requested_type not in {"staff", "manager"}:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="user_type must be 'staff' or 'manager'"
-        )
+    requested_type = _normalize_team_member_type(request.user_type)
 
     normalized_phone = request.phone.strip() if request.phone else ""
     if not normalized_phone:
@@ -773,8 +777,6 @@ async def update_team_member(
         )
 
     normalized_email = request.email.lower().strip() if request.email else None
-    normalized_username = normalized_phone
-
     try:
         member_uuid = uuid.UUID(member_id)
     except ValueError as exc:
@@ -817,7 +819,7 @@ async def update_team_member(
             detail="This mobile number belongs to an inactive staff record. Use Add Team Member to reactivate and reassign it."
         )
 
-    member.username = normalized_username
+    member.username = normalized_phone
     member.business_name = normalized_name
     member.phone = normalized_phone
     member.user_type = requested_type
