@@ -647,9 +647,6 @@ const ProductDetail = () => {
             <AlertDialogTitle>Delete Product?</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete <strong>{product.brand} - {product.name}</strong>?
-              <br /><br />
-              This will mark the product as inactive. Transaction history will be preserved.
-              This action can be reversed by administrators.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

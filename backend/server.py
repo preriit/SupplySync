@@ -1110,6 +1110,71 @@ async def get_products_in_subcategory(
         "products": product_list
     }
 
+
+@api_router.delete("/dealer/subcategories/{subcategory_id}")
+async def soft_delete_subcategory(
+    subcategory_id: str,
+    delete_products: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Soft delete a sub-category and optionally soft delete related products."""
+    require_inventory_write_access(current_user)
+
+    subcat = db.query(SubCategory).filter(
+        SubCategory.id == subcategory_id,
+        SubCategory.is_active == True
+    ).first()
+    if not subcat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sub-category not found or already deleted"
+        )
+
+    merchant_active_products_query = db.query(Product).filter(
+        Product.sub_category_id == subcategory_id,
+        Product.merchant_id == current_user.merchant_id,
+        Product.is_active == True
+    )
+    merchant_active_products_count = merchant_active_products_query.count()
+
+    # Guardrail: never leave active products behind under a deleted category.
+    if merchant_active_products_count > 0 and not delete_products:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"This sub-category has {merchant_active_products_count} active product(s). Confirm product deletion to continue."
+        )
+
+    deleted_products_count = 0
+    if delete_products:
+        deleted_products_count = merchant_active_products_query.update(
+            {"is_active": False},
+            synchronize_session=False
+        )
+
+    remaining_active_products_count = db.query(func.count(Product.id)).filter(
+        Product.sub_category_id == subcategory_id,
+        Product.is_active == True
+    ).scalar() or 0
+    if remaining_active_products_count > 0:
+        db.commit()
+        return {
+            "message": "Products were updated, but sub-category remains active because other active products still reference it.",
+            "subcategory_id": str(subcat.id),
+            "deleted_products_count": int(deleted_products_count),
+            "subcategory_deleted": False,
+        }
+
+    subcat.is_active = False
+    db.commit()
+
+    return {
+        "message": "Sub-category deleted successfully",
+        "subcategory_id": str(subcat.id),
+        "deleted_products_count": int(deleted_products_count),
+        "subcategory_deleted": True,
+    }
+
 @api_router.post("/dealer/products")
 async def create_product(
     request: dict,

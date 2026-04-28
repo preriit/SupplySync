@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Plus, Package, Edit, Trash2, Eye, ArrowLeft, Grid3x3, Box, Minus, History } from 'lucide-react';
+import { Search, Plus, Package, ArrowLeft, Grid3x3, Box, Minus, History } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -70,6 +70,10 @@ const ProductsList = () => {
 
   const handleAddProduct = () => {
     navigate(`/dealer/inventory/${subcategoryId}/products/add`);
+  };
+
+  const openProductDetail = (productId) => {
+    navigate(`/dealer/inventory/${subcategoryId}/products/${productId}`);
   };
 
   const handleTransaction = async (product, type) => {
@@ -286,7 +290,19 @@ const ProductsList = () => {
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {products.map((product) => (
-                    <Card key={product.id} className="hover:shadow-lg transition-shadow">
+                    <Card
+                      key={product.id}
+                      className="cursor-pointer hover:shadow-lg hover:border-orange/40 transition-all"
+                      onClick={() => openProductDetail(product.id)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openProductDetail(product.id);
+                        }
+                      }}
+                    >
                       <CardContent className="p-6">
                         {/* Product Image */}
                         <div className="w-full h-48 bg-gray-100 rounded-lg mb-4 flex items-center justify-center overflow-hidden">
@@ -328,7 +344,10 @@ const ProductsList = () => {
                                   variant="outline"
                                   size="icon"
                                   className="h-9 w-9 border-red-500 text-red-500 hover:bg-red-50"
-                                  onClick={() => setTransactionProduct({ ...product, type: 'subtract' })}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setTransactionProduct({ ...product, type: 'subtract' });
+                                  }}
                                 >
                                   <Minus className="h-4 w-4" />
                                 </Button>
@@ -346,7 +365,10 @@ const ProductsList = () => {
                                   variant="outline"
                                   size="icon"
                                   className="h-9 w-9 border-green-500 text-green-500 hover:bg-green-50"
-                                  onClick={() => setTransactionProduct({ ...product, type: 'add' })}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setTransactionProduct({ ...product, type: 'add' });
+                                  }}
                                 >
                                   <Plus className="h-4 w-4" />
                                 </Button>
@@ -360,18 +382,13 @@ const ProductsList = () => {
                               variant="outline"
                               size="sm"
                               className="flex-1 text-orange border-orange hover:bg-orange-50"
-                              onClick={() => viewTransactionHistory(product)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                viewTransactionHistory(product);
+                              }}
                             >
                               <History className="mr-2 h-4 w-4" />
                               History
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="hover:bg-gray-50"
-                              onClick={() => navigate(`/dealer/inventory/${subcategoryId}/products/${product.id}`)}
-                            >
-                              {canWriteInventory ? <Edit className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                             </Button>
                           </div>
                         </div>

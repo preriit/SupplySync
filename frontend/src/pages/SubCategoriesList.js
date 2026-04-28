@@ -5,14 +5,28 @@ import DealerNav from '../components/DealerNav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Search, Plus, Package, Box, Trash2, ArrowRight, AlertCircle, Grid3x3 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import api from '../utils/api';
 
 const SubCategoriesList = () => {
   const { t } = useTranslation(['inventory', 'common']);
+  const { toast } = useToast();
   const navigate = useNavigate();
   const [subcategories, setSubcategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [deletingSubcategoryId, setDeletingSubcategoryId] = useState(null);
+  const [subcategoryToDelete, setSubcategoryToDelete] = useState(null);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const canWriteInventory = ['dealer', 'manager'].includes(user.user_type);
 
@@ -37,6 +51,48 @@ const SubCategoriesList = () => {
 
   const handleAddCategory = () => {
     navigate('/dealer/inventory/add-category');
+  };
+
+  const openDeleteModal = (subcategory) => {
+    setSubcategoryToDelete(subcategory);
+  };
+
+  const closeDeleteModal = () => {
+    setSubcategoryToDelete(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!subcategoryToDelete) return;
+
+    setDeletingSubcategoryId(subcategoryToDelete.id);
+    try {
+      // Keep category/product lifecycle consistent:
+      // when category has active products, confirmed delete cascades to those products.
+      const shouldDeleteProducts = subcategoryToDelete.product_count > 0;
+      const response = await api.delete(`/dealer/subcategories/${subcategoryToDelete.id}`, {
+        params: {
+          delete_products: shouldDeleteProducts,
+        },
+      });
+      toast({
+        title: 'Sub-category deleted',
+        description: response.data?.message || (
+          response.data?.deleted_products_count
+            ? `Sub-category and ${response.data.deleted_products_count} product(s) were soft deleted.`
+            : 'Sub-category was soft deleted successfully.'
+        ),
+      });
+      closeDeleteModal();
+      fetchSubcategories();
+    } catch (error) {
+      toast({
+        title: 'Delete failed',
+        description: error.response?.data?.detail || 'Failed to delete sub-category. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingSubcategoryId(null);
+    }
   };
 
   return (
@@ -100,10 +156,24 @@ const SubCategoriesList = () => {
         ) : (
           <div className="grid grid-cols-1 gap-4">
             {subcategories.map((subcat) => (
-              <Card key={subcat.id} className="hover:shadow-lg transition-shadow">
+              <Card
+                key={subcat.id}
+                className="hover:shadow-lg hover:border-orange/40 transition-all"
+              >
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
-                    <div className="flex-1">
+                    <div
+                      className="flex-1 cursor-pointer"
+                      onClick={() => handleViewProducts(subcat.id)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleViewProducts(subcat.id);
+                        }
+                      }}
+                    >
                       <div className="flex items-center space-x-3">
                         <div className="w-12 h-12 bg-orange-light rounded-lg flex items-center justify-center">
                           <Grid3x3 className="h-6 w-6 text-orange" />
@@ -115,6 +185,7 @@ const SubCategoriesList = () => {
                           <p className="text-sm text-slate-light">
                             {subcat.size_mm} • {subcat.make_type}
                           </p>
+                          <p className="text-xs text-orange mt-1">Click to open products</p>
                         </div>
                       </div>
                     </div>
@@ -123,7 +194,10 @@ const SubCategoriesList = () => {
                       {subcat.product_count > 0 ? (
                         <Button
                           variant="outline"
-                          onClick={() => handleViewProducts(subcat.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewProducts(subcat.id);
+                          }}
                           className="border-2 border-orange text-orange hover:bg-orange-50"
                         >
                           <span>{t('inventory:view_products')}</span>
@@ -132,20 +206,30 @@ const SubCategoriesList = () => {
                       ) : (
                         <Button
                           variant="outline"
-                          onClick={() => handleViewProducts(subcat.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewProducts(subcat.id);
+                          }}
                           className="border-2 border-orange text-orange hover:bg-orange-50"
                         >
                           {canWriteInventory && <Plus className="mr-2 h-4 w-4" />}
                           <span>{canWriteInventory ? t('inventory:add_products') : t('inventory:view_products')}</span>
                         </Button>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-gray-400 hover:text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </Button>
+                      {canWriteInventory && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-gray-400 hover:text-red-600 hover:bg-red-50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDeleteModal(subcat);
+                          }}
+                          disabled={deletingSubcategoryId === subcat.id}
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </Button>
+                      )}
                     </div>
                   </div>
 
@@ -182,6 +266,36 @@ const SubCategoriesList = () => {
           </div>
         )}
       </div>
+
+      <AlertDialog open={Boolean(subcategoryToDelete)} onOpenChange={(open) => !open && closeDeleteModal()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {subcategoryToDelete?.name || 'this'} category?
+            </AlertDialogTitle>
+            {subcategoryToDelete?.product_count > 0 && (
+              <AlertDialogDescription>
+                This subcategory has <strong>{subcategoryToDelete.product_count}</strong> active product(s). This will
+                delete all active products in this category. Do you want to confirm?
+              </AlertDialogDescription>
+            )}
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(deletingSubcategoryId)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={(e) => {
+                e.preventDefault();
+                handleConfirmDelete();
+              }}
+              disabled={Boolean(deletingSubcategoryId)}
+            >
+              {deletingSubcategoryId ? 'Deleting...' : 'Confirm Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
