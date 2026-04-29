@@ -10,6 +10,7 @@ import hashlib
 import smtplib
 import uuid
 import random
+import requests
 from threading import Lock
 from pathlib import Path
 from email.message import EmailMessage
@@ -18,7 +19,7 @@ from jose import JWTError, jwt
 
 from database import get_db
 from models import (
-    User, Merchant, Product, SubCategory, MakeType, 
+    User, Merchant, Product, SubCategory, MakeType,
     SurfaceType, ApplicationType, BodyType, Quality, Category, Size, ProductTransaction, ProductActivityLog, ProductImage
 )
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
@@ -49,10 +50,44 @@ RESET_PASSWORD_WINDOW_SECONDS = int(os.environ.get("RESET_PASSWORD_WINDOW_SECOND
 RESET_PASSWORD_MAX_ATTEMPTS = int(os.environ.get("RESET_PASSWORD_MAX_ATTEMPTS", "10"))
 LOGIN_OTP_EXPIRE_SECONDS = int(os.environ.get("LOGIN_OTP_EXPIRE_SECONDS", "300"))
 LOGIN_OTP_MAX_VERIFY_ATTEMPTS = int(os.environ.get("LOGIN_OTP_MAX_VERIFY_ATTEMPTS", "5"))
+LOGIN_OTP_RESEND_COOLDOWN_SECONDS = int(os.environ.get("LOGIN_OTP_RESEND_COOLDOWN_SECONDS", "30"))
+LOGIN_OTP_REQUEST_WINDOW_SECONDS = int(os.environ.get("LOGIN_OTP_REQUEST_WINDOW_SECONDS", "900"))
+LOGIN_OTP_REQUEST_MAX_ATTEMPTS = int(os.environ.get("LOGIN_OTP_REQUEST_MAX_ATTEMPTS", "5"))
+LOGIN_OTP_VERIFY_WINDOW_SECONDS = int(os.environ.get("LOGIN_OTP_VERIFY_WINDOW_SECONDS", "900"))
+LOGIN_OTP_VERIFY_MAX_ATTEMPTS = int(os.environ.get("LOGIN_OTP_VERIFY_MAX_ATTEMPTS", "10"))
+TEAM_MEMBER_OTP_EXPIRE_SECONDS = int(os.environ.get("TEAM_MEMBER_OTP_EXPIRE_SECONDS", "600"))
+TEAM_MEMBER_OTP_RESEND_COOLDOWN_SECONDS = int(os.environ.get("TEAM_MEMBER_OTP_RESEND_COOLDOWN_SECONDS", "30"))
+TEAM_MEMBER_OTP_REQUEST_WINDOW_SECONDS = int(os.environ.get("TEAM_MEMBER_OTP_REQUEST_WINDOW_SECONDS", "900"))
+TEAM_MEMBER_OTP_REQUEST_MAX_ATTEMPTS = int(os.environ.get("TEAM_MEMBER_OTP_REQUEST_MAX_ATTEMPTS", "5"))
+TEAM_MEMBER_OTP_VERIFY_WINDOW_SECONDS = int(os.environ.get("TEAM_MEMBER_OTP_VERIFY_WINDOW_SECONDS", "900"))
+TEAM_MEMBER_OTP_VERIFY_MAX_ATTEMPTS = int(os.environ.get("TEAM_MEMBER_OTP_VERIFY_MAX_ATTEMPTS", "10"))
+DEFAULT_PHONE_REGION = os.environ.get("DEFAULT_PHONE_REGION", "IN").strip().upper()
+_PHONE_DIAL_CODES = {
+    "IN": "91",
+    "US": "1",
+    "CA": "1",
+    "GB": "44",
+    "AE": "971",
+    "SG": "65",
+    "AU": "61",
+}
+_ENABLED_PHONE_REGIONS = {
+    item.strip().upper()
+    for item in os.environ.get("ENABLED_PHONE_REGIONS", "IN").split(",")
+    if item.strip()
+}
+if DEFAULT_PHONE_REGION not in _ENABLED_PHONE_REGIONS:
+    _ENABLED_PHONE_REGIONS.add(DEFAULT_PHONE_REGION)
 _RATE_LIMIT_BUCKETS = {}
 _RATE_LIMIT_LOCK = Lock()
 _LOGIN_OTP_STORE = {}
 _LOGIN_OTP_LOCK = Lock()
+_LOGIN_OTP_LAST_SENT_AT = {}
+_TEAM_MEMBER_OTP_STORE = {}
+_TEAM_MEMBER_OTP_LOCK = Lock()
+_TEAM_MEMBER_OTP_LAST_SENT_AT = {}
+_OTP_ACTION_PENDING = {}
+_OTP_ACTION_PENDING_LOCK = Lock()
 
 # Create the main app
 app = FastAPI(
@@ -86,11 +121,13 @@ class LoginResponse(BaseModel):
 
 class RequestLoginOtpRequest(BaseModel):
     phone: str
+    phone_country: Optional[str] = None
 
 
 class VerifyLoginOtpRequest(BaseModel):
     phone: str
     otp: str
+    phone_country: Optional[str] = None
 
 class RegisterDealerRequest(BaseModel):
     username: str
@@ -142,6 +179,21 @@ class TeamMemberCreateRequest(BaseModel):
     user_type: Optional[str] = "staff"
 
 
+class TeamMemberCreateOtpRequest(BaseModel):
+    name: Optional[str] = None
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    password: Optional[str] = None
+    user_type: Optional[str] = "staff"
+    merchant_phone_country: Optional[str] = None
+
+
+class TeamMemberCreateOtpConfirmRequest(BaseModel):
+    request_id: str
+    otp: str
+
+
 class TeamMemberUpdateRequest(BaseModel):
     name: Optional[str] = None
     username: Optional[str] = None
@@ -149,6 +201,22 @@ class TeamMemberUpdateRequest(BaseModel):
     phone: Optional[str] = None
     user_type: Optional[str] = "staff"
     is_active: Optional[bool] = None
+
+
+class TeamMemberUpdateOtpRequest(BaseModel):
+    member_id: str
+    name: Optional[str] = None
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    user_type: Optional[str] = "staff"
+    is_active: Optional[bool] = None
+    merchant_phone_country: Optional[str] = None
+
+
+class TeamMemberUpdateOtpConfirmRequest(BaseModel):
+    request_id: str
+    otp: str
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -390,11 +458,10 @@ def _build_login_response(user: User) -> dict:
 def _resolve_user_by_identifier(db: Session, email: str, phone: str):
     identifier = email or phone
     normalized_phone = "".join(ch for ch in identifier if ch.isdigit())
-    phone_variants = {identifier, normalized_phone}
-    if normalized_phone.startswith("91") and len(normalized_phone) == 12:
-        phone_variants.add(normalized_phone[-10:])
-    if len(normalized_phone) == 10:
-        phone_variants.add(f"+91{normalized_phone}")
+    phone_variants = {identifier, normalized_phone, f"+{normalized_phone}"}
+    for dial_code in _PHONE_DIAL_CODES.values():
+        if normalized_phone.startswith(dial_code) and len(normalized_phone) > len(dial_code) + 5:
+            phone_variants.add(normalized_phone[len(dial_code):])
 
     if "@" in identifier:
         return db.query(User).filter(User.email == identifier).first()
@@ -405,18 +472,130 @@ def _normalize_phone(phone: str) -> str:
     return "".join(ch for ch in (phone or "") if ch.isdigit())
 
 
+def _to_e164(phone: str, phone_country: Optional[str] = None) -> str:
+    raw = (phone or "").strip()
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone number is required")
+
+    if raw.startswith("+"):
+        digits = _normalize_phone(raw)
+        if 8 <= len(digits) <= 15:
+            return f"+{digits}"
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid phone number format")
+
+    region = (phone_country or DEFAULT_PHONE_REGION).strip().upper()
+    if region not in _ENABLED_PHONE_REGIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Phone country '{region}' is not enabled",
+        )
+    dial_code = _PHONE_DIAL_CODES.get(region)
+    if not dial_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Phone country '{region}' is not supported",
+        )
+
+    digits = _normalize_phone(raw)
+    if digits.startswith(dial_code):
+        e164_digits = digits
+    else:
+        e164_digits = f"{dial_code}{digits}"
+
+    if not (8 <= len(e164_digits) <= 15):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid phone number format")
+    return f"+{e164_digits}"
+
+
+def _is_twilio_verify_configured() -> bool:
+    account_sid, auth_token, verify_service_sid = _get_twilio_verify_config()
+    return bool(account_sid and auth_token and verify_service_sid)
+
+
+def _get_twilio_verify_config() -> tuple[Optional[str], Optional[str], Optional[str]]:
+    return (
+        os.environ.get("TWILIO_ACCOUNT_SID"),
+        os.environ.get("TWILIO_AUTH_TOKEN"),
+        os.environ.get("TWILIO_VERIFY_SERVICE_SID"),
+    )
+
+
 def _generate_login_otp() -> str:
     return f"{random.randint(100000, 999999)}"
 
 
 def _store_login_otp(normalized_phone: str, otp: str) -> None:
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=LOGIN_OTP_EXPIRE_SECONDS)
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(seconds=LOGIN_OTP_EXPIRE_SECONDS)
     with _LOGIN_OTP_LOCK:
         _LOGIN_OTP_STORE[normalized_phone] = {
             "otp": otp,
             "expires_at": expires_at,
             "attempts": 0,
         }
+        _LOGIN_OTP_LAST_SENT_AT[normalized_phone] = now
+
+
+def _mark_otp_sent(normalized_phone: str) -> None:
+    with _LOGIN_OTP_LOCK:
+        _LOGIN_OTP_LAST_SENT_AT[normalized_phone] = datetime.now(timezone.utc)
+
+
+def _get_otp_cooldown_remaining_seconds(normalized_phone: str) -> int:
+    with _LOGIN_OTP_LOCK:
+        last_sent_at = _LOGIN_OTP_LAST_SENT_AT.get(normalized_phone)
+    if not last_sent_at:
+        return 0
+    elapsed_seconds = (datetime.now(timezone.utc) - last_sent_at).total_seconds()
+    remaining = LOGIN_OTP_RESEND_COOLDOWN_SECONDS - int(elapsed_seconds)
+    return remaining if remaining > 0 else 0
+
+
+def _send_twilio_login_otp(phone_e164: str) -> bool:
+    account_sid, auth_token, verify_service_sid = _get_twilio_verify_config()
+    if not (account_sid and auth_token and verify_service_sid):
+        logging.error("Twilio OTP send requested without Twilio configuration")
+        return False
+    url = f"https://verify.twilio.com/v2/Services/{verify_service_sid}/Verifications"
+    try:
+        response = requests.post(
+            url,
+            auth=(account_sid, auth_token),
+            data={"To": phone_e164, "Channel": "sms"},
+            timeout=15,
+        )
+        if 200 <= response.status_code < 300:
+            return True
+        logging.error("Twilio OTP send failed (%s): %s", response.status_code, response.text)
+        return False
+    except requests.RequestException as exc:
+        logging.error("Twilio OTP send exception: %s", exc)
+        return False
+
+
+def _verify_twilio_login_otp(phone_e164: str, otp: str) -> bool:
+    account_sid, auth_token, verify_service_sid = _get_twilio_verify_config()
+    if not (account_sid and auth_token and verify_service_sid):
+        logging.error("Twilio OTP verify requested without Twilio configuration")
+        return False
+    url = f"https://verify.twilio.com/v2/Services/{verify_service_sid}/VerificationCheck"
+    try:
+        response = requests.post(
+            url,
+            auth=(account_sid, auth_token),
+            data={"To": phone_e164, "Code": otp},
+            timeout=15,
+        )
+        if not (200 <= response.status_code < 300):
+            logging.warning("Twilio OTP verify non-success (%s): %s", response.status_code, response.text)
+            return False
+        payload = response.json()
+        return payload.get("status") == "approved"
+    except requests.RequestException as exc:
+        logging.error("Twilio OTP verify exception: %s", exc)
+        return False
+    except ValueError:
+        return False
 
 
 def _validate_login_otp(normalized_phone: str, otp: str) -> bool:
@@ -437,6 +616,285 @@ def _validate_login_otp(normalized_phone: str, otp: str) -> bool:
 
         _LOGIN_OTP_STORE.pop(normalized_phone, None)
         return True
+
+
+def _store_team_member_otp(request_id: str, otp: str) -> None:
+    now = datetime.now(timezone.utc)
+    with _TEAM_MEMBER_OTP_LOCK:
+        _TEAM_MEMBER_OTP_STORE[request_id] = {
+            "otp": otp,
+            "expires_at": now + timedelta(seconds=TEAM_MEMBER_OTP_EXPIRE_SECONDS),
+            "attempts": 0,
+        }
+
+
+def _validate_team_member_otp(request_id: str, otp: str) -> bool:
+    now = datetime.now(timezone.utc)
+    with _TEAM_MEMBER_OTP_LOCK:
+        record = _TEAM_MEMBER_OTP_STORE.get(request_id)
+        if not record:
+            return False
+        if now > record["expires_at"]:
+            _TEAM_MEMBER_OTP_STORE.pop(request_id, None)
+            return False
+        if record["attempts"] >= TEAM_MEMBER_OTP_VERIFY_MAX_ATTEMPTS:
+            _TEAM_MEMBER_OTP_STORE.pop(request_id, None)
+            return False
+        if record["otp"] != otp:
+            record["attempts"] += 1
+            return False
+        _TEAM_MEMBER_OTP_STORE.pop(request_id, None)
+        return True
+
+
+def _mark_team_member_otp_sent(merchant_phone: str) -> None:
+    with _TEAM_MEMBER_OTP_LOCK:
+        _TEAM_MEMBER_OTP_LAST_SENT_AT[merchant_phone] = datetime.now(timezone.utc)
+
+
+def _get_team_member_otp_cooldown_remaining_seconds(merchant_phone: str) -> int:
+    with _TEAM_MEMBER_OTP_LOCK:
+        last_sent_at = _TEAM_MEMBER_OTP_LAST_SENT_AT.get(merchant_phone)
+    if not last_sent_at:
+        return 0
+    elapsed_seconds = (datetime.now(timezone.utc) - last_sent_at).total_seconds()
+    remaining = TEAM_MEMBER_OTP_RESEND_COOLDOWN_SECONDS - int(elapsed_seconds)
+    return remaining if remaining > 0 else 0
+
+
+def _resolve_merchant_otp_phone(
+    current_user: User,
+    db: Session,
+    phone_country: Optional[str] = None,
+) -> str:
+    merchant = db.query(Merchant).filter(Merchant.id == current_user.merchant_id).first()
+    merchant_phone = merchant.phone.strip() if merchant and merchant.phone else ""
+    fallback_phone = current_user.phone.strip() if current_user.phone else ""
+    otp_phone = merchant_phone or fallback_phone
+    if not otp_phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Merchant mobile is not configured. Update profile before adding team members.",
+        )
+    return _to_e164(otp_phone, phone_country=phone_country)
+
+
+def _store_otp_action_pending(
+    action_type: str,
+    current_user: User,
+    payload: dict,
+    expires_seconds: int,
+) -> str:
+    request_id = str(uuid.uuid4())
+    with _OTP_ACTION_PENDING_LOCK:
+        _OTP_ACTION_PENDING[request_id] = {
+            "action_type": action_type,
+            "merchant_id": str(current_user.merchant_id),
+            "requested_by_user_id": str(current_user.id),
+            "payload": payload,
+            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=expires_seconds),
+        }
+    return request_id
+
+
+def _get_otp_action_pending(request_id: str, expected_action_type: str) -> Optional[dict]:
+    with _OTP_ACTION_PENDING_LOCK:
+        pending = _OTP_ACTION_PENDING.get(request_id)
+    if not pending:
+        return None
+    if pending.get("action_type") != expected_action_type:
+        return None
+    return pending
+
+
+def _pop_otp_action_pending(request_id: str) -> None:
+    with _OTP_ACTION_PENDING_LOCK:
+        _OTP_ACTION_PENDING.pop(request_id, None)
+
+
+def _request_otp_for_action(
+    *,
+    action_type: str,
+    payload: dict,
+    merchant_phone_e164: str,
+    merchant_phone_key: str,
+    current_user: User,
+    client_ip: str,
+    request_rate_limit_key: str,
+    request_success_message: str,
+) -> dict:
+    if _is_rate_limited(
+        key=request_rate_limit_key,
+        max_attempts=TEAM_MEMBER_OTP_REQUEST_MAX_ATTEMPTS,
+        window_seconds=TEAM_MEMBER_OTP_REQUEST_WINDOW_SECONDS,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many OTP requests. Please try again later.",
+        )
+
+    cooldown_remaining = _get_team_member_otp_cooldown_remaining_seconds(merchant_phone_key)
+    if cooldown_remaining > 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Please wait {cooldown_remaining} seconds before requesting a new OTP.",
+        )
+
+    request_id = _store_otp_action_pending(
+        action_type=action_type,
+        current_user=current_user,
+        payload=payload,
+        expires_seconds=TEAM_MEMBER_OTP_EXPIRE_SECONDS,
+    )
+
+    twilio_configured = _is_twilio_verify_configured()
+    if twilio_configured:
+        sent = _send_twilio_login_otp(merchant_phone_e164)
+        if not sent:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OTP service unavailable. Please try again shortly.",
+            )
+        _mark_team_member_otp_sent(merchant_phone_key)
+    else:
+        if APP_ENV == "production":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OTP service unavailable. Please contact support.",
+            )
+        otp = _generate_login_otp()
+        _store_team_member_otp(request_id=request_id, otp=otp)
+        _mark_team_member_otp_sent(merchant_phone_key)
+        logging.info("Generated OTP for action=%s request_id=%s", action_type, request_id)
+
+    response = {
+        "message": request_success_message,
+        "request_id": request_id,
+        "cooldown_seconds": TEAM_MEMBER_OTP_RESEND_COOLDOWN_SECONDS,
+    }
+    if APP_ENV != "production" and not twilio_configured:
+        response["dev_only_otp"] = otp
+    return response
+
+
+def _confirm_otp_for_action(
+    *,
+    request_id: str,
+    otp_value: str,
+    expected_action_type: str,
+    current_user: User,
+    merchant_phone_e164: str,
+    merchant_phone_key: str,
+    verify_rate_limit_key: str,
+) -> dict:
+    pending = _get_otp_action_pending(request_id=request_id, expected_action_type=expected_action_type)
+    if not pending:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OTP request expired or invalid. Please request a new OTP.",
+        )
+    if str(current_user.id) != pending["requested_by_user_id"] or str(current_user.merchant_id) != pending["merchant_id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This OTP request does not belong to your session.",
+        )
+    if datetime.now(timezone.utc) > pending["expires_at"]:
+        _pop_otp_action_pending(request_id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OTP request expired. Please request a new OTP.",
+        )
+
+    if _is_rate_limited(
+        key=verify_rate_limit_key,
+        max_attempts=TEAM_MEMBER_OTP_VERIFY_MAX_ATTEMPTS,
+        window_seconds=TEAM_MEMBER_OTP_VERIFY_WINDOW_SECONDS,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many OTP verification attempts. Please try again later.",
+        )
+
+    twilio_configured = _is_twilio_verify_configured()
+    is_valid = (
+        _verify_twilio_login_otp(merchant_phone_e164, otp_value)
+        if twilio_configured
+        else _validate_team_member_otp(request_id, otp_value)
+    )
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired OTP",
+        )
+    _pop_otp_action_pending(request_id)
+    return pending
+
+
+def _create_team_member_from_payload(
+    request: TeamMemberCreateRequest,
+    current_user: User,
+    db: Session,
+):
+    requested_type = _normalize_team_member_type(request.user_type)
+
+    normalized_phone = request.phone.strip() if request.phone else None
+    if not normalized_phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mobile number is required"
+        )
+    normalized_name = request.name.strip() if request.name else ""
+    if not normalized_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Name is required"
+        )
+
+    normalized_email = request.email.lower().strip() if request.email else None
+    if normalized_email and db.query(User).filter(User.email == normalized_email).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    if not request.password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password is required"
+        )
+
+    member_email = normalized_email or f"{normalized_phone}@noemail.local"
+    new_member, _created_new = _upsert_member_by_mobile(
+        db=db,
+        current_user=current_user,
+        normalized_phone=normalized_phone,
+        normalized_name=normalized_name,
+        member_email=member_email,
+        requested_type=requested_type,
+        password_hash=get_password_hash(request.password),
+    )
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_team_member_integrity_error_detail(exc)
+        )
+    db.refresh(new_member)
+
+    return {
+        "message": "Team member created successfully",
+        "team_member": {
+            "id": str(new_member.id),
+            "name": new_member.business_name,
+            "username": new_member.username,
+            "email": new_member.email,
+            "phone": new_member.phone,
+            "user_type": new_member.user_type,
+            "merchant_id": str(new_member.merchant_id) if new_member.merchant_id else None,
+            "is_active": new_member.is_active,
+        }
+    }
 
 # Auth Routes
 @api_router.post("/auth/login", response_model=LoginResponse)
@@ -472,48 +930,96 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
 
 
 @api_router.post("/auth/login/request-otp")
-async def request_login_otp(request: RequestLoginOtpRequest, db: Session = Depends(get_db)):
+async def request_login_otp(
+    request: RequestLoginOtpRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+):
     """
     Phase 2: request OTP for mobile-based login.
     Returns dev-only OTP in non-production for local testing.
     """
-    normalized_phone = _normalize_phone(request.phone)
-    if len(normalized_phone) != 10:
+    phone_e164 = _to_e164(request.phone, phone_country=request.phone_country)
+    phone_key = _normalize_phone(phone_e164)
+    client_ip = http_request.client.host if http_request.client else "unknown"
+    if _is_rate_limited(
+        key=f"login-otp-request:{client_ip}:{phone_key}",
+        max_attempts=LOGIN_OTP_REQUEST_MAX_ATTEMPTS,
+        window_seconds=LOGIN_OTP_REQUEST_WINDOW_SECONDS,
+    ):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Please enter a valid 10-digit mobile number",
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many OTP requests. Please try again later.",
+        )
+    cooldown_remaining = _get_otp_cooldown_remaining_seconds(phone_key)
+    if cooldown_remaining > 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Please wait {cooldown_remaining} seconds before requesting a new OTP.",
         )
 
-    user = _resolve_user_by_identifier(db=db, email="", phone=normalized_phone)
+    user = _resolve_user_by_identifier(db=db, email="", phone=phone_e164)
     generic_response = {"message": "If the mobile is registered, OTP has been sent."}
     if not user or not user.is_active:
         return generic_response
 
-    otp = _generate_login_otp()
-    _store_login_otp(normalized_phone=normalized_phone, otp=otp)
-    logging.info("Generated login OTP for %s", normalized_phone)
+    twilio_configured = _is_twilio_verify_configured()
+    if twilio_configured:
+        sent = _send_twilio_login_otp(phone_e164)
+        if not sent:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OTP service unavailable. Please try again shortly.",
+            )
+        _mark_otp_sent(phone_key)
+    else:
+        if APP_ENV == "production":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OTP service unavailable. Please contact support.",
+            )
+        otp = _generate_login_otp()
+        _store_login_otp(normalized_phone=phone_key, otp=otp)
+        logging.info("Generated dev login OTP for %s", phone_key)
 
-    if APP_ENV != "production":
+    if APP_ENV != "production" and not twilio_configured:
         return {**generic_response, "dev_only_otp": otp}
-    return generic_response
+    return {**generic_response, "cooldown_seconds": LOGIN_OTP_RESEND_COOLDOWN_SECONDS}
 
 
 @api_router.post("/auth/login/verify-otp", response_model=LoginResponse)
-async def verify_login_otp(request: VerifyLoginOtpRequest, db: Session = Depends(get_db)):
-    normalized_phone = _normalize_phone(request.phone)
-    if len(normalized_phone) != 10:
+async def verify_login_otp(
+    request: VerifyLoginOtpRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+):
+    phone_e164 = _to_e164(request.phone, phone_country=request.phone_country)
+    phone_key = _normalize_phone(phone_e164)
+    client_ip = http_request.client.host if http_request.client else "unknown"
+    if _is_rate_limited(
+        key=f"login-otp-verify:{client_ip}:{phone_key}",
+        max_attempts=LOGIN_OTP_VERIFY_MAX_ATTEMPTS,
+        window_seconds=LOGIN_OTP_VERIFY_WINDOW_SECONDS,
+    ):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Please enter a valid 10-digit mobile number",
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many OTP verification attempts. Please try again later.",
         )
 
-    if not _validate_login_otp(normalized_phone=normalized_phone, otp=(request.otp or "").strip()):
+    otp_value = (request.otp or "").strip()
+    twilio_configured = _is_twilio_verify_configured()
+    is_otp_valid = (
+        _verify_twilio_login_otp(phone_e164, otp_value)
+        if twilio_configured
+        else _validate_login_otp(normalized_phone=phone_key, otp=otp_value)
+    )
+    if not is_otp_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired OTP",
         )
 
-    user = _resolve_user_by_identifier(db=db, email="", phone=normalized_phone)
+    user = _resolve_user_by_identifier(db=db, email="", phone=phone_e164)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -875,84 +1381,72 @@ async def create_team_member(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a team member and force-link it to dealer's merchant."""
+    """Legacy direct create endpoint (OTP-less)."""
     require_dealer_team_management_access(current_user)
+    return _create_team_member_from_payload(request=request, current_user=current_user, db=db)
 
-    requested_type = _normalize_team_member_type(request.user_type)
 
-    normalized_phone = request.phone.strip() if request.phone else None
-    if not normalized_phone:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Mobile number is required"
-        )
-    normalized_name = request.name.strip() if request.name else ""
-    if not normalized_name:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Name is required"
-        )
-
-    normalized_email = request.email.lower().strip() if request.email else None
-
-    if normalized_email and db.query(User).filter(User.email == normalized_email).first():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
-
-    if not request.password:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password is required"
-        )
-
-    # Optional email is allowed in UI, but users.email is non-null in DB.
-    member_email = normalized_email or f"{normalized_phone}@noemail.local"
-    new_member, _created_new = _upsert_member_by_mobile(
-        db=db,
+@api_router.post("/dealer/team-members/request-create")
+async def request_team_member_create_otp(
+    request: TeamMemberCreateOtpRequest,
+    http_request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Request OTP approval for creating a team member.
+    OTP is sent to merchant's configured mobile number.
+    """
+    require_dealer_team_management_access(current_user)
+    merchant_phone_e164 = _resolve_merchant_otp_phone(
         current_user=current_user,
-        normalized_phone=normalized_phone,
-        normalized_name=normalized_name,
-        member_email=member_email,
-        requested_type=requested_type,
-        password_hash=get_password_hash(request.password),
+        db=db,
+        phone_country=request.merchant_phone_country,
     )
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_team_member_integrity_error_detail(exc)
-        )
-    db.refresh(new_member)
-
-    return {
-        "message": "Team member created successfully",
-        "team_member": {
-            "id": str(new_member.id),
-            "name": new_member.business_name,
-            "username": new_member.username,
-            "email": new_member.email,
-            "phone": new_member.phone,
-            "user_type": new_member.user_type,
-            "merchant_id": str(new_member.merchant_id) if new_member.merchant_id else None,
-            "is_active": new_member.is_active,
-        }
-    }
+    merchant_phone_key = _normalize_phone(merchant_phone_e164)
+    client_ip = http_request.client.host if http_request.client else "unknown"
+    return _request_otp_for_action(
+        action_type="team_member_create",
+        payload=request.model_dump(exclude={"merchant_phone_country"}),
+        merchant_phone_e164=merchant_phone_e164,
+        merchant_phone_key=merchant_phone_key,
+        current_user=current_user,
+        client_ip=client_ip,
+        request_rate_limit_key=f"team-member-create-otp-request:{client_ip}:{merchant_phone_key}",
+        request_success_message="OTP sent to merchant mobile for approval.",
+    )
 
 
-@api_router.put("/dealer/team-members/{member_id}")
-async def update_team_member(
+@api_router.post("/dealer/team-members/confirm-create")
+async def confirm_team_member_create(
+    request: TeamMemberCreateOtpConfirmRequest,
+    http_request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_dealer_team_management_access(current_user)
+    client_ip = http_request.client.host if http_request.client else "unknown"
+    merchant_phone_e164 = _resolve_merchant_otp_phone(current_user=current_user, db=db)
+    merchant_phone_key = _normalize_phone(merchant_phone_e164)
+    pending = _confirm_otp_for_action(
+        request_id=request.request_id,
+        otp_value=(request.otp or "").strip(),
+        expected_action_type="team_member_create",
+        current_user=current_user,
+        merchant_phone_e164=merchant_phone_e164,
+        merchant_phone_key=merchant_phone_key,
+        verify_rate_limit_key=f"team-member-create-otp-verify:{client_ip}:{merchant_phone_key}",
+    )
+    create_request = TeamMemberCreateRequest(**pending["payload"])
+    return _create_team_member_from_payload(request=create_request, current_user=current_user, db=db)
+
+
+def _update_team_member_from_payload(
     member_id: str,
     request: TeamMemberUpdateRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: User,
+    db: Session,
 ):
-    """Update a team member linked to dealer's merchant."""
-    require_dealer_team_management_access(current_user)
-
     requested_type = _normalize_team_member_type(request.user_type)
 
     normalized_phone = request.phone.strip() if request.phone else ""
@@ -1049,6 +1543,83 @@ async def update_team_member(
             "is_active": member.is_active,
         }
     }
+
+
+@api_router.put("/dealer/team-members/{member_id}")
+async def update_team_member(
+    member_id: str,
+    request: TeamMemberUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a team member linked to dealer's merchant."""
+    require_dealer_team_management_access(current_user)
+    return _update_team_member_from_payload(
+        member_id=member_id,
+        request=request,
+        current_user=current_user,
+        db=db,
+    )
+
+
+@api_router.post("/dealer/team-members/request-update")
+async def request_team_member_update_otp(
+    request: TeamMemberUpdateOtpRequest,
+    http_request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_dealer_team_management_access(current_user)
+    merchant_phone_e164 = _resolve_merchant_otp_phone(
+        current_user=current_user,
+        db=db,
+        phone_country=request.merchant_phone_country,
+    )
+    merchant_phone_key = _normalize_phone(merchant_phone_e164)
+    client_ip = http_request.client.host if http_request.client else "unknown"
+    return _request_otp_for_action(
+        action_type="team_member_update",
+        payload={
+            "member_id": request.member_id,
+            **request.model_dump(exclude={"member_id", "merchant_phone_country"}),
+        },
+        merchant_phone_e164=merchant_phone_e164,
+        merchant_phone_key=merchant_phone_key,
+        current_user=current_user,
+        client_ip=client_ip,
+        request_rate_limit_key=f"team-member-update-otp-request:{client_ip}:{merchant_phone_key}",
+        request_success_message="OTP sent to merchant mobile for update approval.",
+    )
+
+
+@api_router.post("/dealer/team-members/confirm-update")
+async def confirm_team_member_update(
+    request: TeamMemberUpdateOtpConfirmRequest,
+    http_request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_dealer_team_management_access(current_user)
+    client_ip = http_request.client.host if http_request.client else "unknown"
+    merchant_phone_e164 = _resolve_merchant_otp_phone(current_user=current_user, db=db)
+    merchant_phone_key = _normalize_phone(merchant_phone_e164)
+    pending = _confirm_otp_for_action(
+        request_id=request.request_id,
+        otp_value=(request.otp or "").strip(),
+        expected_action_type="team_member_update",
+        current_user=current_user,
+        merchant_phone_e164=merchant_phone_e164,
+        merchant_phone_key=merchant_phone_key,
+        verify_rate_limit_key=f"team-member-update-otp-verify:{client_ip}:{merchant_phone_key}",
+    )
+    member_id = pending["payload"]["member_id"]
+    update_request = TeamMemberUpdateRequest(**{k: v for k, v in pending["payload"].items() if k != "member_id"})
+    return _update_team_member_from_payload(
+        member_id=member_id,
+        request=update_request,
+        current_user=current_user,
+        db=db,
+    )
 
 
 @api_router.post("/dealer/team-members/{member_id}/update")

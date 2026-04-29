@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
@@ -47,9 +47,20 @@ const LoginPage = () => {
   const [otp, setOtp] = useState('');
   const [loginMethod, setLoginMethod] = useState('password');
   const [otpRequested, setOtpRequested] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0);
   const [infoMessage, setInfoMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (otpCooldown <= 0) {
+      return undefined;
+    }
+    const timer = window.setInterval(() => {
+      setOtpCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [otpCooldown]);
 
   const completeLogin = (response) => {
     const { access_token, user } = response.data;
@@ -98,6 +109,7 @@ const LoginPage = () => {
         phone: identifier.trim(),
       });
       setOtpRequested(true);
+      setOtpCooldown(Number(response.data?.cooldown_seconds) || 30);
       setInfoMessage(
         response.data?.dev_only_otp
           ? `OTP sent. Dev OTP: ${response.data.dev_only_otp}`
@@ -186,6 +198,7 @@ const LoginPage = () => {
                     setLoginMethod('password');
                     setOtpRequested(false);
                     setOtp('');
+                    setOtpCooldown(0);
                     setError('');
                     setInfoMessage('');
                   }}
@@ -271,6 +284,18 @@ const LoginPage = () => {
                       ? 'Verify OTP'
                       : 'Send OTP'}
               </Button>
+              {loginMethod === 'otp' && otpRequested && (
+                <div className="text-center text-sm">
+                  <button
+                    type="button"
+                    onClick={handleRequestOtp}
+                    disabled={loading || otpCooldown > 0}
+                    className="text-orange disabled:text-slate-400 disabled:cursor-not-allowed hover:underline"
+                  >
+                    {otpCooldown > 0 ? `Resend OTP in ${otpCooldown}s` : 'Resend OTP'}
+                  </button>
+                </div>
+              )}
             </form>
           </CardContent>
           <CardFooter className="flex justify-center">

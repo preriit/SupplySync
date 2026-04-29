@@ -30,9 +30,23 @@ const TeamMembersPage = () => {
   const [updateError, setUpdateError] = useState('');
   const [members, setMembers] = useState([]);
   const [activeSection, setActiveSection] = useState('active');
+  const [nameSortDirection, setNameSortDirection] = useState('asc');
+  const [roleSortDirection, setRoleSortDirection] = useState('asc');
   const [editingMemberId, setEditingMemberId] = useState(null);
   const [editFormData, setEditFormData] = useState(INITIAL_EDIT_FORM);
   const [formData, setFormData] = useState(INITIAL_CREATE_FORM);
+  const [createOtpRequested, setCreateOtpRequested] = useState(false);
+  const [createRequestId, setCreateRequestId] = useState('');
+  const [createOtp, setCreateOtp] = useState('');
+  const [createPayload, setCreatePayload] = useState(null);
+  const [otpCooldown, setOtpCooldown] = useState(0);
+  const [createFlowMessage, setCreateFlowMessage] = useState('');
+  const [createDevOtp, setCreateDevOtp] = useState('');
+  const [editOtpRequestedForMember, setEditOtpRequestedForMember] = useState(null);
+  const [editRequestId, setEditRequestId] = useState('');
+  const [editOtp, setEditOtp] = useState('');
+  const [editOtpCooldown, setEditOtpCooldown] = useState(0);
+  const [editDevOtp, setEditDevOtp] = useState('');
 
   const getErrorMessage = (error, fallback) => {
     const normalizeMessage = (message) => {
@@ -106,8 +120,35 @@ const TeamMembersPage = () => {
     return members.filter((member) => member.is_active);
   }, [members, activeSection]);
 
+  const sortedVisibleMembers = useMemo(() => {
+    // Section filter runs first, then sorting applies to current view only.
+    // Primary sort: role, Secondary sort: name (stable tie-breaker for readability).
+    return [...visibleMembers].sort((a, b) => {
+      const roleLeft = (a.user_type || '').trim().toLowerCase();
+      const roleRight = (b.user_type || '').trim().toLowerCase();
+      const roleComparison = roleLeft.localeCompare(roleRight);
+      if (roleComparison !== 0) {
+        return roleSortDirection === 'asc' ? roleComparison : -roleComparison;
+      }
+
+      const left = (a.name || '').trim().toLowerCase();
+      const right = (b.name || '').trim().toLowerCase();
+      const comparison = left.localeCompare(right);
+      return nameSortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [visibleMembers, nameSortDirection, roleSortDirection]);
+
+  const toggleNameSort = () => {
+    setNameSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+  };
+
+  const toggleRoleSort = () => {
+    setRoleSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+  };
+
   const handleCreate = async (e) => {
     e.preventDefault();
+    setCreateFlowMessage('');
     const trimmedName = formData.name?.trim();
     const trimmedPhone = formData.phone?.trim();
     if (!trimmedName) {
@@ -126,28 +167,107 @@ const TeamMembersPage = () => {
       });
       return;
     }
+    const payload = {
+      ...formData,
+      name: trimmedName,
+      username: trimmedPhone,
+      email: formData.email?.trim() || null,
+      phone: trimmedPhone,
+      // Keep generated password server-side compatible without exposing a manual password step.
+      password: window.crypto?.randomUUID?.() || `${Date.now()}${Math.random().toString(36).slice(2)}`,
+    };
+
     setSaving(true);
     try {
-      const generatedPassword = window.crypto?.randomUUID?.() || `${Date.now()}${Math.random().toString(36).slice(2)}`;
-      const payload = {
-        ...formData,
-        name: trimmedName,
-        username: trimmedPhone,
-        email: formData.email?.trim() || null,
-        phone: trimmedPhone,
-        password: generatedPassword,
-      };
-      await api.post('/dealer/team-members', payload);
+      if (!createOtpRequested) {
+        const response = await api.post('/dealer/team-members/request-create', payload);
+        setCreatePayload(payload);
+        setCreateOtpRequested(true);
+        setCreateRequestId(response.data?.request_id || '');
+        setOtpCooldown(Number(response.data?.cooldown_seconds) || 30);
+        setCreateDevOtp(response.data?.dev_only_otp || '');
+        setCreateFlowMessage('OTP sent for approval. Enter OTP below to complete team-member creation.');
+        toast({
+          title: 'OTP sent',
+          description: response.data?.dev_only_otp
+            ? `Approval OTP sent. Dev OTP: ${response.data.dev_only_otp}`
+            : 'Approval OTP sent to merchant mobile.',
+        });
+      } else {
+        if (!createOtp.trim()) {
+          toast({
+            title: 'OTP is required',
+            description: 'Please enter the approval OTP.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        await api.post('/dealer/team-members/confirm-create', {
+          request_id: createRequestId,
+          otp: createOtp.trim(),
+        });
+        toast({
+          title: 'Team member added',
+          description: 'New team member is linked to your merchant',
+        });
+        setFormData(INITIAL_CREATE_FORM);
+        setCreateOtpRequested(false);
+        setCreateRequestId('');
+        setCreateOtp('');
+        setCreatePayload(null);
+        setOtpCooldown(0);
+        setCreateFlowMessage('');
+        setCreateDevOtp('');
+        fetchMembers();
+      }
+    } catch (error) {
+      const status = error?.response?.status;
+      let message = getErrorMessage(error, 'Please verify details and try again');
+      if (!createOtpRequested && status === 404) {
+        message = 'Team-member OTP endpoint is not available. Restart backend to load latest code.';
+      }
+      setCreateFlowMessage(message);
       toast({
-        title: 'Team member added',
-        description: 'New team member is linked to your merchant',
+        title: createOtpRequested ? 'Failed to verify OTP' : 'Failed to send approval OTP',
+        description: message,
+        variant: 'destructive',
       });
-      setFormData(INITIAL_CREATE_FORM);
-      fetchMembers();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (otpCooldown <= 0) {
+      return undefined;
+    }
+    const timer = window.setInterval(() => {
+      setOtpCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [otpCooldown]);
+
+  const resendCreateOtp = async () => {
+    if (!createPayload) {
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await api.post('/dealer/team-members/request-create', createPayload);
+      setCreateRequestId(response.data?.request_id || '');
+      setOtpCooldown(Number(response.data?.cooldown_seconds) || 30);
+      setCreateDevOtp(response.data?.dev_only_otp || '');
+      setCreateFlowMessage('OTP resent for approval. Enter the latest OTP to continue.');
+      toast({
+        title: 'OTP resent',
+        description: response.data?.dev_only_otp
+          ? `Approval OTP resent. Dev OTP: ${response.data.dev_only_otp}`
+          : 'Approval OTP sent to merchant mobile.',
+      });
     } catch (error) {
       toast({
-        title: 'Failed to add team member',
-        description: error.response?.data?.detail || 'Please verify details and try again',
+        title: 'Failed to resend OTP',
+        description: getErrorMessage(error, 'Please try again shortly.'),
         variant: 'destructive',
       });
     } finally {
@@ -158,6 +278,11 @@ const TeamMembersPage = () => {
   const startEditing = (member) => {
     setUpdateError('');
     setEditingMemberId(member.id);
+    setEditOtpRequestedForMember(null);
+    setEditRequestId('');
+    setEditOtp('');
+    setEditOtpCooldown(0);
+    setEditDevOtp('');
     setEditFormData({
       ...INITIAL_EDIT_FORM,
       name: member.name || '',
@@ -172,6 +297,11 @@ const TeamMembersPage = () => {
     setUpdateError('');
     setEditingMemberId(null);
     setEditFormData(INITIAL_EDIT_FORM);
+    setEditOtpRequestedForMember(null);
+    setEditRequestId('');
+    setEditOtp('');
+    setEditOtpCooldown(0);
+    setEditDevOtp('');
   };
 
   const handleSaveEdit = async (memberId) => {
@@ -230,7 +360,87 @@ const TeamMembersPage = () => {
 
     setUpdatingMemberId(memberId);
     try {
-      await api.post(`/dealer/team-members/${memberId}/update`, {
+      const payload = {
+        name: trimmedName,
+        username: trimmedPhone,
+        email: editFormData.email?.trim() || null,
+        phone: trimmedPhone,
+        user_type: trimmedRole,
+        is_active: editFormData.is_active,
+      };
+
+      if (editOtpRequestedForMember !== memberId) {
+        const response = await api.post('/dealer/team-members/request-update', {
+          member_id: memberId,
+          ...payload,
+        });
+        setEditOtpRequestedForMember(memberId);
+        setEditRequestId(response.data?.request_id || '');
+        setEditOtp('');
+        setEditOtpCooldown(Number(response.data?.cooldown_seconds) || 30);
+        setEditDevOtp(response.data?.dev_only_otp || '');
+        toast({
+          title: 'OTP sent',
+          description: response.data?.dev_only_otp
+            ? `Approval OTP sent. Dev OTP: ${response.data.dev_only_otp}`
+            : 'Approval OTP sent to merchant mobile.',
+        });
+      } else {
+        if (!editOtp.trim()) {
+          const message = 'Please enter OTP before saving.';
+          setUpdateError(message);
+          toast({
+            title: 'OTP is required',
+            description: message,
+            variant: 'destructive',
+          });
+          return;
+        }
+        await api.post('/dealer/team-members/confirm-update', {
+          request_id: editRequestId,
+          otp: editOtp.trim(),
+        });
+        toast({
+          title: 'Team member updated',
+          description: 'Changes saved successfully.',
+        });
+        cancelEditing();
+        fetchMembers();
+      }
+    } catch (error) {
+      const message = getErrorMessage(error, 'Please verify details and try again');
+      setUpdateError(message);
+      toast({
+        title: 'Failed to update team member',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setUpdatingMemberId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (editOtpCooldown <= 0) {
+      return undefined;
+    }
+    const timer = window.setInterval(() => {
+      setEditOtpCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [editOtpCooldown]);
+
+  const resendEditOtp = async (memberId) => {
+    const trimmedName = editFormData.name?.trim();
+    const trimmedPhone = editFormData.phone?.trim();
+    const trimmedRole = editFormData.user_type?.trim();
+    if (!trimmedName || !trimmedPhone || !trimmedRole || editFormData.is_active == null) {
+      return;
+    }
+    setUpdatingMemberId(memberId);
+    try {
+      const response = await api.post('/dealer/team-members/request-update', {
+        member_id: memberId,
         name: trimmedName,
         username: trimmedPhone,
         email: editFormData.email?.trim() || null,
@@ -238,17 +448,20 @@ const TeamMembersPage = () => {
         user_type: trimmedRole,
         is_active: editFormData.is_active,
       });
+      setEditRequestId(response.data?.request_id || '');
+      setEditOtpCooldown(Number(response.data?.cooldown_seconds) || 30);
+      setEditDevOtp(response.data?.dev_only_otp || '');
       toast({
-        title: 'Team member updated',
-        description: 'Changes saved successfully.',
+        title: 'OTP resent',
+        description: response.data?.dev_only_otp
+          ? `Approval OTP resent. Dev OTP: ${response.data.dev_only_otp}`
+          : 'Approval OTP sent to merchant mobile.',
       });
-      cancelEditing();
-      fetchMembers();
     } catch (error) {
-      const message = getErrorMessage(error, 'Please verify details and try again');
+      const message = getErrorMessage(error, 'Please try again shortly.');
       setUpdateError(message);
       toast({
-        title: 'Failed to update team member',
+        title: 'Failed to resend OTP',
         description: message,
         variant: 'destructive',
       });
@@ -315,8 +528,55 @@ const TeamMembersPage = () => {
               </div>
               <div className="md:col-span-2">
                 <Button type="submit" className="bg-orange hover:bg-orange-dark" disabled={saving}>
-                  {saving ? 'Adding...' : 'Add Team Member'}
+                  {saving ? (createOtpRequested ? 'Verifying...' : 'Sending OTP...') : (createOtpRequested ? 'Verify OTP & Add Team Member' : 'Add Team Member')}
                 </Button>
+                {createOtpRequested ? (
+                  <div className="mt-3 space-y-2">
+                    <Label htmlFor="tm_create_otp">Approval OTP *</Label>
+                    <Input
+                      id="tm_create_otp"
+                      value={createOtp}
+                      onChange={(e) => setCreateOtp(e.target.value)}
+                      placeholder="Enter OTP sent to merchant mobile"
+                      required
+                    />
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        className="text-sm text-orange hover:underline disabled:text-slate-400 disabled:cursor-not-allowed"
+                        onClick={resendCreateOtp}
+                        disabled={saving || otpCooldown > 0}
+                      >
+                        {otpCooldown > 0 ? `Resend OTP in ${otpCooldown}s` : 'Resend OTP'}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-sm text-slate-light hover:underline"
+                        onClick={() => {
+                          setCreateOtpRequested(false);
+                          setCreateRequestId('');
+                          setCreateOtp('');
+                          setCreatePayload(null);
+                          setOtpCooldown(0);
+                          setCreateFlowMessage('');
+                          setCreateDevOtp('');
+                        }}
+                      >
+                        Cancel OTP flow
+                      </button>
+                    </div>
+                    {createDevOtp ? (
+                      <p className="text-sm text-orange font-medium">
+                        Dev OTP: {createDevOtp}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+                {createFlowMessage ? (
+                  <p className={`mt-2 text-sm ${createOtpRequested ? 'text-slate-light' : 'text-red-600'}`}>
+                    {createFlowMessage}
+                  </p>
+                ) : null}
               </div>
             </form>
           </CardContent>
@@ -371,16 +631,40 @@ const TeamMembersPage = () => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b">
-                      <th className="text-left py-2">Name</th>
+                      <th className="text-left py-2">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 font-semibold hover:text-orange"
+                          onClick={toggleNameSort}
+                          title={`Sort name ${nameSortDirection === 'asc' ? 'descending' : 'ascending'}`}
+                        >
+                          Name
+                          <span className="text-xs text-slate-light">
+                            {nameSortDirection === 'asc' ? '↑' : '↓'}
+                          </span>
+                        </button>
+                      </th>
                       <th className="text-left py-2">Mobile No.</th>
                       <th className="text-left py-2">Email</th>
-                      <th className="text-left py-2">Role</th>
+                      <th className="text-left py-2">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 font-semibold hover:text-orange"
+                          onClick={toggleRoleSort}
+                          title={`Sort role ${roleSortDirection === 'asc' ? 'descending' : 'ascending'}`}
+                        >
+                          Role
+                          <span className="text-xs text-slate-light">
+                            {roleSortDirection === 'asc' ? '↑' : '↓'}
+                          </span>
+                        </button>
+                      </th>
                       <th className="text-left py-2">Status</th>
                       <th className="text-left py-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleMembers.map((member) => {
+                    {sortedVisibleMembers.map((member) => {
                       const isEditing = editingMemberId === member.id;
                       const isSavingThisRow = updatingMemberId === member.id;
                       return (
@@ -448,18 +732,46 @@ const TeamMembersPage = () => {
                           </td>
                           <td className="py-2">
                             {isEditing ? (
-                              <div className="flex gap-2">
+                              <div className="flex flex-col gap-2">
+                                {editOtpRequestedForMember === member.id ? (
+                                  <>
+                                    <Input
+                                      value={editOtp}
+                                      onChange={(e) => setEditOtp(e.target.value)}
+                                      placeholder="Enter approval OTP"
+                                    />
+                                    {editDevOtp ? (
+                                      <p className="text-xs text-orange font-medium">Dev OTP: {editDevOtp}</p>
+                                    ) : null}
+                                    <div className="flex gap-2">
+                                      <button
+                                        type="button"
+                                        className="text-xs text-orange hover:underline disabled:text-slate-400 disabled:cursor-not-allowed"
+                                        onClick={() => resendEditOtp(member.id)}
+                                        disabled={isSavingThisRow || editOtpCooldown > 0}
+                                      >
+                                        {editOtpCooldown > 0 ? `Resend OTP in ${editOtpCooldown}s` : 'Resend OTP'}
+                                      </button>
+                                    </div>
+                                  </>
+                                ) : null}
+                                <div className="flex gap-2">
                                 <Button
                                   type="button"
                                   className="bg-orange hover:bg-orange-dark"
                                   disabled={isSavingThisRow}
                                   onClick={() => handleSaveEdit(member.id)}
                                 >
-                                  {isSavingThisRow ? 'Saving...' : 'Save'}
+                                  {isSavingThisRow
+                                    ? 'Saving...'
+                                    : editOtpRequestedForMember === member.id
+                                      ? 'Verify OTP & Save'
+                                      : 'Save'}
                                 </Button>
                                 <Button type="button" variant="outline" onClick={cancelEditing} disabled={isSavingThisRow}>
                                   Cancel
                                 </Button>
+                                </div>
                               </div>
                             ) : (
                               <Button type="button" variant="outline" onClick={() => startEditing(member)}>
