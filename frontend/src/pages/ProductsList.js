@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Plus, Package, ArrowLeft, Grid3x3, Box, Minus, History } from 'lucide-react';
+import { Search, Plus, Package, ArrowLeft, Grid3x3, Box, Minus, History, Trash2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -36,9 +36,16 @@ const ProductsList = () => {
   const { toast } = useToast();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const canWriteInventory = ['dealer', 'manager'].includes(user.user_type);
+  const canDeleteProducts = user.user_type === 'dealer';
   const [subcategory, setSubcategory] = useState(null);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedProductIds, setSelectedProductIds] = useState([]);
+  const [deletingProducts, setDeletingProducts] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteScope, setDeleteScope] = useState('single');
+  const [productToDelete, setProductToDelete] = useState(null);
   
   // Transaction state
   const [transactionProduct, setTransactionProduct] = useState(null);
@@ -88,6 +95,75 @@ const ProductsList = () => {
 
   const openProductDetail = (productId) => {
     navigate(`/dealer/inventory/${subcategoryId}/products/${productId}`);
+  };
+
+  const toggleSelectionMode = () => {
+    // Keep multi-delete behind an explicit mode to avoid accidental bulk operations.
+    setSelectionMode((prev) => !prev);
+    setSelectedProductIds([]);
+  };
+
+  const toggleProductSelection = (productId) => {
+    setSelectedProductIds((prev) => (
+      prev.includes(productId)
+        ? prev.filter((id) => id !== productId)
+        : [...prev, productId]
+    ));
+  };
+
+  const openSingleDeleteDialog = (product) => {
+    setDeleteScope('single');
+    setProductToDelete(product);
+    setDeleteDialogOpen(true);
+  };
+
+  const openBulkDeleteDialog = () => {
+    if (selectedProductIds.length === 0) {
+      toast({
+        title: 'No products selected',
+        description: 'Select at least one product to delete.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setDeleteScope('bulk');
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    setDeletingProducts(true);
+    try {
+      if (deleteScope === 'single' && productToDelete) {
+        await api.delete(`/dealer/products/${productToDelete.id}`);
+        setProducts((prev) => prev.filter((product) => product.id !== productToDelete.id));
+        toast({
+          title: 'Product deleted',
+          description: `${productToDelete.brand} ${productToDelete.name} deleted successfully.`,
+        });
+      } else if (deleteScope === 'bulk') {
+        const response = await api.post('/dealer/products/bulk-delete', {
+          product_ids: selectedProductIds,
+        });
+        setProducts((prev) => prev.filter((product) => !selectedProductIds.includes(product.id)));
+        toast({
+          title: 'Bulk delete completed',
+          description: response?.data?.message || `${selectedProductIds.length} product(s) deleted.`,
+        });
+        setSelectionMode(false);
+        setSelectedProductIds([]);
+      }
+    } catch (error) {
+      toast({
+        title: 'Delete failed',
+        description: error.response?.data?.detail || 'Could not delete product(s).',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingProducts(false);
+      setDeleteDialogOpen(false);
+      setProductToDelete(null);
+      setDeleteScope('single');
+    }
   };
 
   const handleTransaction = async (product, type) => {
@@ -263,15 +339,37 @@ const ProductsList = () => {
                 <h1 className="text-3xl font-display font-bold text-slate">
                   Products
                 </h1>
-                {canWriteInventory && (
-                  <Button
-                    onClick={handleAddProduct}
-                    className="bg-orange hover:bg-orange-dark text-white shadow-md"
-                  >
-                    <Plus className="mr-2 h-5 w-5" />
-                    Add Product
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {canDeleteProducts && (
+                    <>
+                      <Button
+                        variant={selectionMode ? 'secondary' : 'outline'}
+                        onClick={toggleSelectionMode}
+                      >
+                        {selectionMode ? 'Cancel Selection' : 'Select'}
+                      </Button>
+                      {selectionMode && (
+                        <Button
+                          variant="destructive"
+                          onClick={openBulkDeleteDialog}
+                          disabled={selectedProductIds.length === 0 || deletingProducts}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete Selected ({selectedProductIds.length})
+                        </Button>
+                      )}
+                    </>
+                  )}
+                  {canWriteInventory && (
+                    <Button
+                      onClick={handleAddProduct}
+                      className="bg-orange hover:bg-orange-dark text-white shadow-md"
+                    >
+                      <Plus className="mr-2 h-5 w-5" />
+                      Add Product
+                    </Button>
+                  )}
+                </div>
               </div>
               {stockFilter === 'low' && (
                 <p className="text-sm text-yellow-600 mt-2">Showing low-stock products (1-19 boxes).</p>
@@ -400,6 +498,19 @@ const ProductsList = () => {
 
                           {/* Actions */}
                           <div className="flex items-center space-x-2 pt-4 border-t border-gray-100">
+                            {selectionMode && canDeleteProducts && (
+                              <label
+                                className="inline-flex items-center gap-2 text-sm text-slate-light"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedProductIds.includes(product.id)}
+                                  onChange={() => toggleProductSelection(product.id)}
+                                />
+                                Select
+                              </label>
+                            )}
                             <Button
                               variant="outline"
                               size="sm"
@@ -412,6 +523,19 @@ const ProductsList = () => {
                               <History className="mr-2 h-4 w-4" />
                               History
                             </Button>
+                            {canDeleteProducts && !selectionMode && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-red-600 border-red-300 hover:bg-red-50"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openSingleDeleteDialog(product);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </CardContent>
@@ -428,6 +552,36 @@ const ProductsList = () => {
           </>
         )}
       </div>
+
+      {/* Shared confirmation for single and bulk product delete actions. */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteScope === 'bulk' ? 'Delete selected products?' : 'Delete product?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteScope === 'bulk'
+                ? `This will delete ${selectedProductIds.length} selected product(s).`
+                : `Are you sure you want to delete ${productToDelete?.brand || ''} ${productToDelete?.name || ''}?`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingProducts}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={deletingProducts}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              {deletingProducts
+                ? 'Deleting...'
+                : deleteScope === 'bulk'
+                  ? 'Delete Selected'
+                  : 'Delete Product'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       
       {/* Transaction Dialog */}
       <Dialog open={transactionProduct !== null} onOpenChange={() => {

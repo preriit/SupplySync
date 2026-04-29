@@ -1639,14 +1639,11 @@ async def delete_product(
             detail="Product not found"
         )
     
-    # Soft delete
+    # Soft delete + activity log (single source of truth for delete behavior).
     product.is_active = False
     from datetime import datetime, timezone
     product.updated_at = datetime.now(timezone.utc)
-    
-    db.commit()
-    
-    # Log deletion activity
+
     log_product_activity(
         db=db,
         product_id=str(product.id),
@@ -1659,6 +1656,58 @@ async def delete_product(
     
     return {
         "message": f"Product '{product.brand} {product.name}' deleted successfully"
+    }
+
+
+@api_router.post("/dealer/products/bulk-delete")
+async def bulk_delete_products(
+    request: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Soft delete multiple products in one request."""
+    require_dealer_delete_access(current_user)
+
+    product_ids = request.get("product_ids") or []
+    if not isinstance(product_ids, list) or len(product_ids) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="product_ids must be a non-empty list"
+        )
+
+    products = db.query(Product).filter(
+        Product.id.in_(product_ids),
+        Product.merchant_id == current_user.merchant_id,
+        Product.is_active == True
+    ).all()
+
+    if not products:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No matching active products found for deletion"
+        )
+
+    deleted_names = []
+    from datetime import datetime, timezone
+    for product in products:
+        product.is_active = False
+        product.updated_at = datetime.now(timezone.utc)
+        deleted_names.append(f"{product.brand} {product.name}")
+        log_product_activity(
+            db=db,
+            product_id=str(product.id),
+            merchant_id=str(current_user.merchant_id),
+            user_id=str(current_user.id),
+            activity_type='deleted',
+            description=f"Product deleted: {product.brand} {product.name}"
+        )
+
+    db.commit()
+
+    return {
+        "message": f"{len(products)} product(s) deleted successfully",
+        "deleted_count": len(products),
+        "deleted_products": deleted_names,
     }
 
 # Product Transactions Routes
