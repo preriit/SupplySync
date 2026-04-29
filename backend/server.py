@@ -959,6 +959,21 @@ async def get_dashboard_stats(
         Product.current_quantity == 0
     ).scalar()
 
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+
+    products_updated_today = db.query(func.count(func.distinct(ProductActivityLog.product_id))).filter(
+        ProductActivityLog.merchant_id == merchant_id,
+        ProductActivityLog.created_at >= today_start,
+        ProductActivityLog.created_at < today_end
+    ).scalar()
+
+    inventory_transactions_today = db.query(func.count(ProductTransaction.id)).filter(
+        ProductTransaction.merchant_id == merchant_id,
+        ProductTransaction.created_at >= today_start,
+        ProductTransaction.created_at < today_end
+    ).scalar()
+
     # Pick a target sub-category for actionable navigation from dashboard KPIs.
     low_stock_target = db.query(
         Product.sub_category_id.label("subcategory_id"),
@@ -1070,8 +1085,10 @@ async def get_dashboard_stats(
     return {
         "total_products": total_products or 0,
         "active_products": active_products or 0,
-        "low_stock_items": low_stock or 0,
-        "out_of_stock_items": out_of_stock or 0,
+        "low_stock_skus": low_stock or 0,
+        "out_of_stock_skus": out_of_stock or 0,
+        "products_updated_today": products_updated_today or 0,
+        "inventory_transactions_today": inventory_transactions_today or 0,
         "low_stock_target_subcategory_id": str(low_stock_target.subcategory_id) if low_stock_target else None,
         "out_of_stock_target_subcategory_id": str(out_of_stock_target.subcategory_id) if out_of_stock_target else None,
         "inventory_value": float(inventory_value),

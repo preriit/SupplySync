@@ -5,7 +5,7 @@ import DealerNav from '../components/DealerNav';
 import StatCard from '../components/StatCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Package, AlertTriangle, ShoppingBag, Plus, Eye } from 'lucide-react';
+import { Package, AlertTriangle, ShoppingBag, Repeat, Plus, Eye } from 'lucide-react';
 import api from '../utils/api';
 
 const DealerDashboard = () => {
@@ -15,9 +15,9 @@ const DealerDashboard = () => {
   const canWriteInventory = ['dealer', 'manager'].includes(user.user_type);
   const [stats, setStats] = useState({
     total_products: 0,
-    active_products: 0,
-    low_stock_items: 0,
-    out_of_stock_items: 0,
+    low_stock_skus: 0,
+    out_of_stock_skus: 0,
+    inventory_transactions_today: 0,
     inventory_value: 0,
     recent_activity: []
   });
@@ -33,9 +33,9 @@ const DealerDashboard = () => {
       // Ensure all fields have default values
       setStats({
         total_products: response.data?.total_products || 0,
-        active_products: response.data?.active_products || 0,
-        low_stock_items: response.data?.low_stock_items || 0,
-        out_of_stock_items: response.data?.out_of_stock_items || 0,
+        low_stock_skus: response.data?.low_stock_skus || 0,
+        out_of_stock_skus: response.data?.out_of_stock_skus || 0,
+        inventory_transactions_today: response.data?.inventory_transactions_today || 0,
         inventory_value: response.data?.inventory_value || 0,
         recent_activity: response.data?.recent_activity || []
       });
@@ -45,15 +45,6 @@ const DealerDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
   };
 
   const openStockFocus = (stockType) => {
@@ -80,14 +71,14 @@ const DealerDashboard = () => {
           <StatCard
             title={t('dashboard:total_products')}
             value={loading ? '...' : stats.total_products}
-            subtitle={`${stats.active_products} ${t('dashboard:active_products').toLowerCase()}`}
+            subtitle="Total inventory items"
             icon={Package}
             iconColor="text-orange"
           />
           
           <StatCard
-            title={t('dashboard:low_stock_items')}
-            value={loading ? '...' : stats.low_stock_items}
+            title="Low Stock SKUs"
+            value={loading ? '...' : stats.low_stock_skus}
             subtitle="Need attention • Click to review"
             icon={AlertTriangle}
             iconColor="text-yellow-500"
@@ -95,12 +86,20 @@ const DealerDashboard = () => {
           />
           
           <StatCard
-            title={t('dashboard:out_of_stock')}
-            value={loading ? '...' : stats.out_of_stock_items}
+            title="Out of Stock SKUs"
+            value={loading ? '...' : stats.out_of_stock_skus}
             subtitle="Restock required • Click to review"
             icon={ShoppingBag}
             iconColor="text-red-500"
             onClick={() => openStockFocus('out')}
+          />
+
+          <StatCard
+            title="Inventory Transactions Today"
+            value={loading ? '...' : stats.inventory_transactions_today}
+            subtitle="Today's throughput"
+            icon={Repeat}
+            iconColor="text-purple-600"
           />
         </div>
 
@@ -170,7 +169,7 @@ const DealerDashboard = () => {
         </div>
 
         {/* Get Started Guide - Show if no products */}
-        {!loading && stats.total_products === 0 && canWriteInventory && (
+        {!loading && stats.low_stock_skus === 0 && stats.out_of_stock_skus === 0 && canWriteInventory && (
           <Card className="mt-6 border-orange border-2">
             <CardHeader>
               <CardTitle className="text-xl font-display text-orange">
