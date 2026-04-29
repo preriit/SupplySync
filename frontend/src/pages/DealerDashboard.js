@@ -5,7 +5,7 @@ import DealerNav from '../components/DealerNav';
 import StatCard from '../components/StatCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Package, AlertTriangle, TrendingUp, ShoppingBag, Plus, Eye, FileText } from 'lucide-react';
+import { Package, AlertTriangle, ShoppingBag, Plus, Eye } from 'lucide-react';
 import api from '../utils/api';
 
 const DealerDashboard = () => {
@@ -56,6 +56,10 @@ const DealerDashboard = () => {
     }).format(value);
   };
 
+  const openStockFocus = (stockType) => {
+    navigate(`/dealer/stock-alerts?stock=${stockType}`);
+  };
+
   return (
     <div className="min-h-screen bg-grey-50">
       <DealerNav />
@@ -84,17 +88,19 @@ const DealerDashboard = () => {
           <StatCard
             title={t('dashboard:low_stock_items')}
             value={loading ? '...' : stats.low_stock_items}
-            subtitle="Need attention"
+            subtitle="Need attention • Click to review"
             icon={AlertTriangle}
             iconColor="text-yellow-500"
+            onClick={() => openStockFocus('low')}
           />
           
           <StatCard
             title={t('dashboard:out_of_stock')}
             value={loading ? '...' : stats.out_of_stock_items}
-            subtitle="Restock required"
+            subtitle="Restock required • Click to review"
             icon={ShoppingBag}
             iconColor="text-red-500"
+            onClick={() => openStockFocus('out')}
           />
         </div>
 

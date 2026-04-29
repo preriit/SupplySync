@@ -99,9 +99,16 @@ class UserResponse(BaseModel):
     id: str
     username: str
     email: str
+    phone: Optional[str] = None
     user_type: str
     merchant_id: Optional[str] = None
     preferred_language: str
+
+
+class UpdateProfileRequest(BaseModel):
+    username: str
+    phone: Optional[str] = None
+    preferred_language: Optional[str] = "en"
 
 
 class TeamMemberCreateRequest(BaseModel):
@@ -635,6 +642,59 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "id": str(current_user.id),
         "username": current_user.username,
         "email": current_user.email,
+        "phone": current_user.phone,
+        "user_type": current_user.user_type,
+        "merchant_id": str(current_user.merchant_id) if current_user.merchant_id else None,
+        "preferred_language": current_user.preferred_language
+    }
+
+
+@api_router.put("/auth/me")
+async def update_me(
+    request: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update profile fields that are editable in dealer profile UI."""
+    normalized_username = (request.username or "").strip()
+    if not normalized_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Name is required"
+        )
+
+    normalized_phone = request.phone.strip() if request.phone else None
+    normalized_language = (request.preferred_language or "en").strip().lower()
+    if normalized_language not in {"en", "hi"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="preferred_language must be 'en' or 'hi'"
+        )
+
+    if db.query(User).filter(User.username == normalized_username, User.id != current_user.id).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Name is already in use"
+        )
+
+    if normalized_phone and db.query(User).filter(User.phone == normalized_phone, User.id != current_user.id).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Phone number is already in use"
+        )
+
+    current_user.username = normalized_username
+    current_user.phone = normalized_phone
+    current_user.preferred_language = normalized_language
+
+    db.commit()
+    db.refresh(current_user)
+
+    return {
+        "id": str(current_user.id),
+        "username": current_user.username,
+        "email": current_user.email,
+        "phone": current_user.phone,
         "user_type": current_user.user_type,
         "merchant_id": str(current_user.merchant_id) if current_user.merchant_id else None,
         "preferred_language": current_user.preferred_language
@@ -898,6 +958,34 @@ async def get_dashboard_stats(
         Product.merchant_id == merchant_id,
         Product.current_quantity == 0
     ).scalar()
+
+    # Pick a target sub-category for actionable navigation from dashboard KPIs.
+    low_stock_target = db.query(
+        Product.sub_category_id.label("subcategory_id"),
+        func.count(Product.id).label("product_count")
+    ).filter(
+        Product.merchant_id == merchant_id,
+        Product.is_active == True,
+        Product.current_quantity < 20,
+        Product.current_quantity > 0
+    ).group_by(
+        Product.sub_category_id
+    ).order_by(
+        func.count(Product.id).desc()
+    ).first()
+
+    out_of_stock_target = db.query(
+        Product.sub_category_id.label("subcategory_id"),
+        func.count(Product.id).label("product_count")
+    ).filter(
+        Product.merchant_id == merchant_id,
+        Product.is_active == True,
+        Product.current_quantity == 0
+    ).group_by(
+        Product.sub_category_id
+    ).order_by(
+        func.count(Product.id).desc()
+    ).first()
     
     # Total inventory value - NOTE: Price not implemented yet
     inventory_value = 0  # Will be calculated once pricing is added
@@ -984,8 +1072,79 @@ async def get_dashboard_stats(
         "active_products": active_products or 0,
         "low_stock_items": low_stock or 0,
         "out_of_stock_items": out_of_stock or 0,
+        "low_stock_target_subcategory_id": str(low_stock_target.subcategory_id) if low_stock_target else None,
+        "out_of_stock_target_subcategory_id": str(out_of_stock_target.subcategory_id) if out_of_stock_target else None,
         "inventory_value": float(inventory_value),
         "recent_activity": formatted_activities
+    }
+
+
+@api_router.get("/dealer/products/stock-alerts")
+async def get_stock_alert_products(
+    stock_type: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List stock-alert products grouped by sub-category."""
+    require_merchant_read_access(current_user)
+
+    normalized_stock_type = (stock_type or "").strip().lower()
+    if normalized_stock_type not in {"low", "out"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="stock_type must be 'low' or 'out'"
+        )
+
+    products_query = db.query(Product).filter(
+        Product.merchant_id == current_user.merchant_id,
+        Product.is_active == True
+    )
+    if normalized_stock_type == "low":
+        products_query = products_query.filter(
+            Product.current_quantity > 0,
+            Product.current_quantity < 20
+        )
+    else:
+        products_query = products_query.filter(Product.current_quantity == 0)
+
+    products = products_query.order_by(Product.current_quantity.asc(), Product.name.asc()).all()
+    if not products:
+        return {
+            "stock_type": normalized_stock_type,
+            "total_products": 0,
+            "groups": []
+        }
+
+    subcategory_ids = {product.sub_category_id for product in products}
+    subcategories = db.query(SubCategory).filter(SubCategory.id.in_(subcategory_ids)).all()
+    subcategory_map = {str(subcategory.id): subcategory for subcategory in subcategories}
+
+    grouped_products = {}
+    for product in products:
+        subcategory_id = str(product.sub_category_id)
+        subcategory = subcategory_map.get(subcategory_id)
+        if subcategory_id not in grouped_products:
+            grouped_products[subcategory_id] = {
+                "subcategory_id": subcategory_id,
+                "subcategory_name": subcategory.name if subcategory else "Unknown Category",
+                "size_mm": f"{subcategory.height_mm}mm x {subcategory.width_mm}mm" if subcategory else "",
+                "products": []
+            }
+
+        grouped_products[subcategory_id]["products"].append({
+            "id": str(product.id),
+            "name": product.name,
+            "brand": product.brand,
+            "current_quantity": product.current_quantity,
+        })
+
+    groups = list(grouped_products.values())
+    groups.sort(key=lambda group: group["subcategory_name"])
+
+    return {
+        "stock_type": normalized_stock_type,
+        "total_products": len(products),
+        "groups": groups
     }
 
 # Sub-Categories Routes

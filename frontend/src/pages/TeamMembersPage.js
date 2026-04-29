@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DealerNav from '../components/DealerNav';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,7 @@ const TeamMembersPage = () => {
   const [updatingMemberId, setUpdatingMemberId] = useState(null);
   const [updateError, setUpdateError] = useState('');
   const [members, setMembers] = useState([]);
+  const [activeSection, setActiveSection] = useState('active');
   const [editingMemberId, setEditingMemberId] = useState(null);
   const [editFormData, setEditFormData] = useState(INITIAL_EDIT_FORM);
   const [formData, setFormData] = useState(INITIAL_CREATE_FORM);
@@ -86,6 +87,24 @@ const TeamMembersPage = () => {
   useEffect(() => {
     fetchMembers();
   }, [fetchMembers]);
+
+  const memberCounts = useMemo(() => {
+    const active = members.filter((member) => member.is_active).length;
+    const inactive = members.filter((member) => !member.is_active).length;
+    return { active, inactive, all: members.length };
+  }, [members]);
+
+  // Keep the operational list focused by default (active users first),
+  // while still allowing quick access to inactive records for reactivation/history.
+  const visibleMembers = useMemo(() => {
+    if (activeSection === 'inactive') {
+      return members.filter((member) => !member.is_active);
+    }
+    if (activeSection === 'all') {
+      return members;
+    }
+    return members.filter((member) => member.is_active);
+  }, [members, activeSection]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -305,13 +324,45 @@ const TeamMembersPage = () => {
 
         <Card>
           <CardHeader>
-            <CardTitle>Current Team ({members.length})</CardTitle>
+            <CardTitle>Current Team ({memberCounts.all})</CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="flex items-center gap-2 mb-4">
+              <Button
+                type="button"
+                variant={activeSection === 'active' ? 'default' : 'outline'}
+                className={activeSection === 'active' ? 'bg-orange hover:bg-orange-dark' : ''}
+                onClick={() => setActiveSection('active')}
+              >
+                Active ({memberCounts.active})
+              </Button>
+              <Button
+                type="button"
+                variant={activeSection === 'inactive' ? 'default' : 'outline'}
+                className={activeSection === 'inactive' ? 'bg-orange hover:bg-orange-dark' : ''}
+                onClick={() => setActiveSection('inactive')}
+              >
+                Inactive ({memberCounts.inactive})
+              </Button>
+              <Button
+                type="button"
+                variant={activeSection === 'all' ? 'default' : 'outline'}
+                className={activeSection === 'all' ? 'bg-orange hover:bg-orange-dark' : ''}
+                onClick={() => setActiveSection('all')}
+              >
+                All ({memberCounts.all})
+              </Button>
+            </div>
             {loading ? (
               <p className="text-slate-light">Loading...</p>
-            ) : members.length === 0 ? (
-              <p className="text-slate-light">No team members found yet.</p>
+            ) : visibleMembers.length === 0 ? (
+              <p className="text-slate-light">
+                {activeSection === 'inactive'
+                  ? 'No inactive team members found.'
+                  : activeSection === 'active'
+                    ? 'No active team members found.'
+                    : 'No team members found yet.'}
+              </p>
             ) : (
               <div className="overflow-x-auto">
                 {updateError ? (
@@ -329,7 +380,7 @@ const TeamMembersPage = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {members.map((member) => {
+                    {visibleMembers.map((member) => {
                       const isEditing = editingMemberId === member.id;
                       const isSavingThisRow = updatingMemberId === member.id;
                       return (

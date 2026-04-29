@@ -2,9 +2,32 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowUpIcon, ArrowDownIcon } from 'lucide-react';
 
-const StatCard = ({ title, value, subtitle, icon: Icon, trend, trendValue, iconColor = 'text-orange' }) => {
+const StatCard = ({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  trend,
+  trendValue,
+  iconColor = 'text-orange',
+  onClick,
+  className = '',
+}) => {
+  const isInteractive = typeof onClick === 'function';
+
   return (
-    <Card className="hover:shadow-card-hover transition-shadow duration-200">
+    <Card
+      className={`hover:shadow-card-hover transition-shadow duration-200 ${isInteractive ? 'cursor-pointer hover:border-orange/40' : ''} ${className}`}
+      onClick={onClick}
+      role={isInteractive ? 'button' : undefined}
+      tabIndex={isInteractive ? 0 : undefined}
+      onKeyDown={isInteractive ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      } : undefined}
+    >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium text-slate-light">
           {title}

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import DealerNav from '../components/DealerNav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +32,7 @@ const ProductsList = () => {
   const { t } = useTranslation(['inventory', 'common']);
   const navigate = useNavigate();
   const { subcategoryId } = useParams();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const canWriteInventory = ['dealer', 'manager'].includes(user.user_type);
@@ -51,6 +52,19 @@ const ProductsList = () => {
   const [historyProduct, setHistoryProduct] = useState(null);
   const [transactionHistory, setTransactionHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const stockFilter = searchParams.get('stock');
+
+  // Dashboard can deep-link into this page with ?stock=low|out.
+  // Filtering is intentionally client-side because products are already fetched for a single subcategory.
+  const filteredProducts = products.filter((product) => {
+    if (stockFilter === 'low') {
+      return product.current_quantity > 0 && product.current_quantity < 20;
+    }
+    if (stockFilter === 'out') {
+      return product.current_quantity === 0;
+    }
+    return true;
+  });
 
   useEffect(() => {
     fetchProducts();
@@ -234,7 +248,7 @@ const ProductsList = () => {
                     </div>
                     <div className="text-right">
                       <p className="text-3xl font-display font-bold text-orange">
-                        {products.length}
+                        {filteredProducts.length}
                       </p>
                       <p className="text-sm text-slate-light">Products</p>
                     </div>
@@ -259,9 +273,15 @@ const ProductsList = () => {
                   </Button>
                 )}
               </div>
+              {stockFilter === 'low' && (
+                <p className="text-sm text-yellow-600 mt-2">Showing low-stock products (1-19 boxes).</p>
+              )}
+              {stockFilter === 'out' && (
+                <p className="text-sm text-red-600 mt-2">Showing out-of-stock products (0 boxes).</p>
+              )}
             </div>
 
-            {products.length === 0 ? (
+            {filteredProducts.length === 0 ? (
               /* Empty State */
               <Card className="border-2 border-dashed border-gray-300">
                 <CardContent className="p-12 text-center">
@@ -269,10 +289,12 @@ const ProductsList = () => {
                     <Package className="h-8 w-8 text-gray-400" />
                   </div>
                   <h3 className="text-lg font-semibold text-slate mb-2">
-                    No products yet
+                    {stockFilter ? 'No products match this stock filter' : 'No products yet'}
                   </h3>
                   <p className="text-slate-light mb-4">
-                    Start by adding your first product to this category
+                    {stockFilter
+                      ? 'Try another category or clear the filter from dashboard.'
+                      : 'Start by adding your first product to this category'}
                   </p>
                   {canWriteInventory && (
                     <Button
@@ -289,7 +311,7 @@ const ProductsList = () => {
               /* Products Grid */
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {products.map((product) => (
+                  {filteredProducts.map((product) => (
                     <Card
                       key={product.id}
                       className="cursor-pointer hover:shadow-lg hover:border-orange/40 transition-all"
@@ -399,7 +421,7 @@ const ProductsList = () => {
 
                 {/* Results Count */}
                 <div className="mt-8 text-center text-sm text-slate-light">
-                  Showing {products.length} products
+                  Showing {filteredProducts.length} products
                 </div>
               </>
             )}

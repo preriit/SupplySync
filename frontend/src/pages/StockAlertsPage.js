@@ -1,0 +1,161 @@
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import DealerNav from '../components/DealerNav';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { AlertTriangle, ArrowLeft, ShoppingBag, ChevronDown, ChevronUp } from 'lucide-react';
+import api from '../utils/api';
+
+const StockAlertsPage = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState({ stock_type: 'low', total_products: 0, groups: [] });
+  const [expandedGroups, setExpandedGroups] = useState({});
+
+  const stockType = (searchParams.get('stock') || 'low').toLowerCase();
+  const isOutOfStock = stockType === 'out';
+
+  useEffect(() => {
+    const fetchStockAlerts = async () => {
+      setLoading(true);
+      try {
+        const response = await api.get('/dealer/products/stock-alerts', {
+          params: { stock_type: stockType },
+        });
+        const payload = response.data || { stock_type: stockType, total_products: 0, groups: [] };
+        setData(payload);
+        // Expand all groups by default for quick first scan.
+        const initialExpandedState = {};
+        payload.groups.forEach((group) => {
+          initialExpandedState[group.subcategory_id] = true;
+        });
+        setExpandedGroups(initialExpandedState);
+      } catch (error) {
+        setData({ stock_type: stockType, total_products: 0, groups: [] });
+        setExpandedGroups({});
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStockAlerts();
+  }, [stockType]);
+
+  const toggleGroup = (subcategoryId) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [subcategoryId]: !prev[subcategoryId],
+    }));
+  };
+
+  return (
+    <div className="min-h-screen bg-grey-50">
+      <DealerNav />
+
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <Button
+          variant="ghost"
+          onClick={() => navigate('/dealer/dashboard')}
+          className="mb-6 text-orange hover:text-orange-dark"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Dashboard
+        </Button>
+
+        <div className="mb-6">
+          <h1 className="text-3xl font-display font-bold text-slate">
+            {isOutOfStock ? 'Out of Stock Products' : 'Low Stock Products'}
+          </h1>
+          <p className="text-slate-light mt-1">
+            {loading ? 'Loading...' : `${data.total_products} product(s) need attention`}
+          </p>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange mx-auto"></div>
+          </div>
+        ) : data.groups.length === 0 ? (
+          <Card className="border-2 border-dashed border-gray-300">
+            <CardContent className="p-12 text-center">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                {isOutOfStock ? (
+                  <ShoppingBag className="h-8 w-8 text-gray-400" />
+                ) : (
+                  <AlertTriangle className="h-8 w-8 text-gray-400" />
+                )}
+              </div>
+              <h3 className="text-lg font-semibold text-slate mb-2">
+                No matching products found
+              </h3>
+              <p className="text-slate-light">Everything looks healthy for this stock segment.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {data.groups.map((group) => (
+              <Card key={group.subcategory_id}>
+                <CardHeader
+                  className="cursor-pointer"
+                  onClick={() => toggleGroup(group.subcategory_id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleGroup(group.subcategory_id);
+                    }
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <CardTitle className="text-xl font-display text-slate">
+                        {group.subcategory_name}
+                      </CardTitle>
+                      <p className="text-sm text-slate-light">{group.size_mm}</p>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-light">
+                      <span className="text-sm">{group.products.length} products</span>
+                      {expandedGroups[group.subcategory_id] ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                {expandedGroups[group.subcategory_id] && (
+                  <CardContent>
+                  <div className="space-y-2">
+                    {group.products.map((product) => (
+                      <button
+                        key={product.id}
+                        type="button"
+                        onClick={() => navigate(`/dealer/inventory/${group.subcategory_id}/products/${product.id}`)}
+                        className="w-full text-left p-3 rounded-md border hover:border-orange hover:bg-orange-50 transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs text-orange font-semibold uppercase tracking-wide">{product.brand}</p>
+                            <p className="font-medium text-slate">{product.name}</p>
+                          </div>
+                          <p className={`font-semibold ${product.current_quantity === 0 ? 'text-red-600' : 'text-yellow-600'}`}>
+                            {product.current_quantity} boxes
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  </CardContent>
+                )}
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default StockAlertsPage;

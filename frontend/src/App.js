@@ -11,6 +11,8 @@ import ProductsList from './pages/ProductsList';
 import AddProduct from './pages/AddProduct';
 import ProductDetail from './pages/ProductDetail';
 import TeamMembersPage from './pages/TeamMembersPage';
+import DealerProfile from './pages/DealerProfile';
+import StockAlertsPage from './pages/StockAlertsPage';
 import DealerComingSoon from './pages/DealerComingSoon';
 
 // Admin Pages
@@ -69,7 +71,9 @@ const PAGE_TITLE_BY_ROUTE = [
   { path: '/dealer/inventory/:subcategoryId/products', title: 'Products' },
   { path: '/dealer/inventory/:subcategoryId/products/add', title: 'Add Product' },
   { path: '/dealer/inventory/:subcategoryId/products/:productId', title: 'Product Details' },
+  { path: '/dealer/stock-alerts', title: 'Stock Alerts' },
   { path: '/dealer/team-members', title: 'Team Members' },
+  { path: '/dealer/profile', title: 'Profile' },
   { path: '/dealer/analytics', title: 'Analytics' },
 ];
 
@@ -201,10 +205,28 @@ function App() {
         />
 
         <Route
+          path="/dealer/stock-alerts"
+          element={
+            <ProtectedRoute allowedTypes={['dealer', 'manager', 'staff']}>
+              <StockAlertsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/dealer/team-members"
           element={
             <ProtectedRoute allowedTypes={['dealer']}>
               <TeamMembersPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/dealer/profile"
+          element={
+            <ProtectedRoute allowedTypes={['dealer', 'manager', 'staff']}>
+              <DealerProfile />
             </ProtectedRoute>
           }
         />
