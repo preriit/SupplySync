@@ -26,6 +26,7 @@ from auth import get_password_hash, verify_password, create_access_token, get_cu
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from typing import List
+from services.transaction_reconciliation import analyze_product_transactions
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -437,6 +438,42 @@ def _coverage_per_pc_from_mm(width_mm: int, height_mm: int) -> tuple[float, floa
 
 def _normalized_size_token(size_value: str) -> str:
     return (size_value or "").replace('"', "").replace(" ", "").lower()
+
+
+def _looks_like_phone_identifier(value: Optional[str]) -> bool:
+    if not value:
+        return False
+    compact = str(value).strip().replace(" ", "").replace("-", "")
+    if compact.startswith("+"):
+        compact = compact[1:]
+    return compact.isdigit() and len(compact) >= 7
+
+
+def _user_display_name(user: Optional[User]) -> str:
+    if not user:
+        return "Unknown"
+
+    username = (user.username or "").strip()
+    email = (user.email or "").strip()
+
+    # Migrated legacy users can have phone numbers stored as username; show a better identity.
+    if username and not _looks_like_phone_identifier(username):
+        return username
+    if email:
+        return email
+    if username:
+        return username
+    if user.phone:
+        return str(user.phone)
+    return "Unknown"
+
+
+def _brand_product_label(brand: Optional[str], product_name: Optional[str]) -> str:
+    brand_text = (brand or "").strip()
+    name_text = (product_name or "").strip()
+    if brand_text and name_text:
+        return f"{brand_text} - {name_text}"
+    return brand_text or name_text or "Unnamed Product"
 
 
 def _build_login_response(user: User) -> dict:
@@ -1682,6 +1719,51 @@ async def get_dashboard_stats(
         ProductTransaction.created_at >= today_start,
         ProductTransaction.created_at < today_end
     ).scalar()
+    yesterday_start = today_start - timedelta(days=1)
+    yesterday_end = today_start
+    inventory_transactions_yesterday = db.query(func.count(ProductTransaction.id)).filter(
+        ProductTransaction.merchant_id == merchant_id,
+        ProductTransaction.created_at >= yesterday_start,
+        ProductTransaction.created_at < yesterday_end
+    ).scalar()
+
+    tx_sparkline_rows = db.query(
+        func.date_trunc("day", ProductTransaction.created_at).label("day"),
+        func.count(ProductTransaction.id).label("count")
+    ).filter(
+        ProductTransaction.merchant_id == merchant_id,
+        ProductTransaction.created_at >= (today_start - timedelta(days=6)),
+        ProductTransaction.created_at < today_end
+    ).group_by(
+        func.date_trunc("day", ProductTransaction.created_at)
+    ).order_by(
+        func.date_trunc("day", ProductTransaction.created_at).asc()
+    ).all()
+
+    tx_count_by_day = {row.day.date(): int(row.count or 0) for row in tx_sparkline_rows}
+    tx_sparkline = []
+    for idx in range(7):
+        day = (today_start - timedelta(days=6 - idx)).date()
+        tx_sparkline.append(tx_count_by_day.get(day, 0))
+
+    tx_trend = None
+    if inventory_transactions_yesterday and inventory_transactions_yesterday > 0:
+        delta_pct = ((inventory_transactions_today - inventory_transactions_yesterday) / inventory_transactions_yesterday) * 100.0
+        direction = "up" if delta_pct >= 0 else "down"
+        tx_trend = {
+            "direction": direction,
+            "value": f"{abs(delta_pct):.0f}%",
+            "label": "vs yesterday",
+        }
+    elif inventory_transactions_today and inventory_transactions_today > 0:
+        tx_trend = {
+            "direction": "up",
+            "value": "New activity",
+            "label": "vs yesterday",
+        }
+
+    movement_window_start = datetime.now(timezone.utc) - timedelta(days=30)
+    dead_stock_cutoff = datetime.now(timezone.utc) - timedelta(days=90)
 
     # Pick a target sub-category for actionable navigation from dashboard KPIs.
     low_stock_target = db.query(
@@ -1720,24 +1802,126 @@ async def get_dashboard_stats(
         ProductActivityLog.description,
         ProductActivityLog.changes,
         ProductActivityLog.created_at,
+        User.username,
+        User.email,
         Product.brand,
         Product.name
     ).join(
         Product, 
         ProductActivityLog.product_id == Product.id
+    ).outerjoin(
+        User,
+        ProductActivityLog.user_id == User.id
     ).filter(
         ProductActivityLog.merchant_id == merchant_id
     ).order_by(
         ProductActivityLog.created_at.desc()
     ).limit(5).all()  # Changed from 10 to 5
+
+    # Fast-moving products (last 30 days): highest outward movement.
+    fast_moving_rows = db.query(
+        ProductTransaction.product_id,
+        Product.sub_category_id,
+        Product.brand,
+        Product.name,
+        Product.current_quantity,
+        func.sum(ProductTransaction.quantity).label("units_moved")
+    ).join(
+        Product, Product.id == ProductTransaction.product_id
+    ).filter(
+        ProductTransaction.merchant_id == merchant_id,
+        ProductTransaction.transaction_type == "subtract",
+        ProductTransaction.created_at >= movement_window_start,
+        Product.is_active == True
+    ).group_by(
+        ProductTransaction.product_id,
+        Product.sub_category_id,
+        Product.brand,
+        Product.name,
+        Product.current_quantity
+    ).order_by(
+        func.sum(ProductTransaction.quantity).desc()
+    ).limit(5).all()
+
+    fast_moving_products = [
+        {
+            "product_id": str(row.product_id),
+            "sub_category_id": str(row.sub_category_id) if row.sub_category_id else None,
+            "brand": (row.brand or "").strip(),
+            "product_name": (row.name or "").strip(),
+            "name": _brand_product_label(row.brand, row.name),
+            "units_moved": int(row.units_moved or 0),
+            "in_stock": int(row.current_quantity or 0),
+            "current_stock": int(row.current_quantity or 0),
+        }
+        for row in fast_moving_rows
+    ]
+
+    # Dead stock candidates: active products with quantity > 0 and no movement in last 90 days.
+    last_tx_subquery = db.query(
+        ProductTransaction.product_id.label("product_id"),
+        func.max(ProductTransaction.created_at).label("last_tx_at")
+    ).filter(
+        ProductTransaction.merchant_id == merchant_id
+    ).group_by(
+        ProductTransaction.product_id
+    ).subquery()
+
+    dead_stock_rows = db.query(
+        Product.id,
+        Product.sub_category_id,
+        Product.brand,
+        Product.name,
+        Product.current_quantity,
+        last_tx_subquery.c.last_tx_at
+    ).outerjoin(
+        last_tx_subquery, last_tx_subquery.c.product_id == Product.id
+    ).filter(
+        Product.merchant_id == merchant_id,
+        Product.is_active == True,
+        Product.current_quantity > 0,
+        or_(
+            last_tx_subquery.c.last_tx_at.is_(None),
+            last_tx_subquery.c.last_tx_at < dead_stock_cutoff
+        )
+    ).order_by(
+        last_tx_subquery.c.last_tx_at.asc()
+    ).limit(5).all()
+
+    dead_stock_products = []
+    for row in dead_stock_rows:
+        stale_days = None
+        if row.last_tx_at:
+            stale_days = max(0, (datetime.now(timezone.utc) - row.last_tx_at.replace(tzinfo=timezone.utc)).days)
+            stale_text = f"{stale_days} days ago"
+            last_movement = row.last_tx_at.strftime("%d %b %Y")
+        else:
+            stale_text = "No transactions"
+            last_movement = "No movement"
+        is_urgent = stale_days is None or stale_days >= 180
+        dead_stock_products.append({
+            "product_id": str(row.id),
+            "sub_category_id": str(row.sub_category_id) if row.sub_category_id else None,
+            "brand": (row.brand or "").strip(),
+            "product_name": (row.name or "").strip(),
+            "name": _brand_product_label(row.brand, row.name),
+            "current_quantity": int(row.current_quantity or 0),
+            "current_stock": int(row.current_quantity or 0),
+            "stale_for": stale_text,
+            "last_movement": last_movement,
+            "last_movement_at": row.last_tx_at.isoformat() if row.last_tx_at else None,
+            "stale_days": stale_days,
+            "days_since_movement": stale_days,
+            "is_urgent": is_urgent,
+        })
     
     # Format recent activities for frontend
     formatted_activities = []
     for activity in recent_activities:
-        activity_type, description, changes, created_at, brand, product_name = activity
+        activity_type, description, changes, created_at, username, email, brand, product_name = activity
         
         # Create product display name
-        tile_name = f"{brand} {product_name}" if brand and product_name else "Product"
+        tile_name = _brand_product_label(brand, product_name)
         
         # Create human-readable title with more details
         if activity_type == 'created':
@@ -1749,7 +1933,7 @@ async def get_dashboard_stats(
         elif activity_type == 'quantity_add':
             # Extract quantity and values from changes JSON
             if changes:
-                quantity = changes.get('quantity_change', 1)
+                quantity = abs(int(changes.get('quantity_change', 1) or 1))
                 before = changes.get('from', 0)
                 after = changes.get('to', 0)
                 title = f"Add {quantity} boxes {tile_name} : {before} → {after}"
@@ -1758,7 +1942,7 @@ async def get_dashboard_stats(
         elif activity_type == 'quantity_subtract':
             # Extract quantity and values from changes JSON
             if changes:
-                quantity = changes.get('quantity_change', 1)
+                quantity = abs(int(changes.get('quantity_change', 1) or 1))
                 before = changes.get('from', 0)
                 after = changes.get('to', 0)
                 title = f"Subtract {quantity} boxes {tile_name} : {before} → {after}"
@@ -1768,7 +1952,10 @@ async def get_dashboard_stats(
             title = f"{activity_type.title()} {tile_name}"
         
         # Calculate time ago
-        time_diff = datetime.now(timezone.utc) - created_at.replace(tzinfo=timezone.utc)
+        created_at_utc = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+        if created_at_utc.tzinfo != timezone.utc:
+            created_at_utc = created_at_utc.astimezone(timezone.utc)
+        time_diff = datetime.now(timezone.utc) - created_at_utc
         if time_diff.days > 0:
             if time_diff.days == 1:
                 time_ago = "Yesterday"
@@ -1785,10 +1972,14 @@ async def get_dashboard_stats(
         else:
             time_ago = "Just now"
         
+        actor = (username or "").strip() or (email or "").strip() or "System"
+
         formatted_activities.append({
             "title": title,
             "time": time_ago,
-            "action": activity_type
+            "created_at": created_at_utc.isoformat(),
+            "action": activity_type,
+            "actor": actor,
         })
     
     return {
@@ -1798,10 +1989,141 @@ async def get_dashboard_stats(
         "out_of_stock_skus": out_of_stock or 0,
         "products_updated_today": products_updated_today or 0,
         "inventory_transactions_today": inventory_transactions_today or 0,
+        "inventory_transactions_trend": tx_trend,
+        "inventory_transactions_sparkline": tx_sparkline,
+        "kpi_trends": {
+            "inventory_transactions_today": tx_trend
+        },
         "low_stock_target_subcategory_id": str(low_stock_target.subcategory_id) if low_stock_target else None,
         "out_of_stock_target_subcategory_id": str(out_of_stock_target.subcategory_id) if out_of_stock_target else None,
         "inventory_value": float(inventory_value),
-        "recent_activity": formatted_activities
+        "recent_activity": formatted_activities,
+        # Canonical dashboard operational datasets
+        "fast_movers": fast_moving_products,
+        "dead_stock": dead_stock_products,
+        # Backward-compatible keys used by existing frontend wiring
+        "fast_moving_products": fast_moving_products,
+        "dead_stock_products": dead_stock_products,
+    }
+
+
+@api_router.get("/dealer/dashboard/products-list")
+async def get_dashboard_products_list(
+    list_type: str,
+    limit: int = 20,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Operational dashboard list view for fast movers/dead stock."""
+    require_merchant_read_access(current_user)
+    merchant_id = current_user.merchant_id
+
+    normalized_type = (list_type or "").strip().lower()
+    if normalized_type not in {"fast_movers", "dead_stock"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="list_type must be 'fast_movers' or 'dead_stock'",
+        )
+
+    safe_limit = max(1, min(int(limit or 20), 100))
+
+    if normalized_type == "fast_movers":
+        movement_window_start = datetime.now(timezone.utc) - timedelta(days=30)
+        rows = db.query(
+            ProductTransaction.product_id,
+            Product.sub_category_id,
+            Product.brand,
+            Product.name,
+            Product.current_quantity,
+            func.sum(ProductTransaction.quantity).label("units_moved")
+        ).join(
+            Product, Product.id == ProductTransaction.product_id
+        ).filter(
+            ProductTransaction.merchant_id == merchant_id,
+            ProductTransaction.transaction_type == "subtract",
+            ProductTransaction.created_at >= movement_window_start,
+            Product.is_active == True
+        ).group_by(
+            ProductTransaction.product_id,
+            Product.sub_category_id,
+            Product.brand,
+            Product.name,
+            Product.current_quantity
+        ).order_by(
+            func.sum(ProductTransaction.quantity).desc()
+        ).limit(safe_limit).all()
+
+        items = [
+            {
+                "product_id": str(row.product_id),
+                "sub_category_id": str(row.sub_category_id) if row.sub_category_id else None,
+                "brand": (row.brand or "").strip(),
+                "product_name": (row.name or "").strip(),
+            "name": _brand_product_label(row.brand, row.name),
+                "units_moved": int(row.units_moved or 0),
+                "current_stock": int(row.current_quantity or 0),
+            }
+            for row in rows
+        ]
+    else:
+        dead_stock_cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+        last_tx_subquery = db.query(
+            ProductTransaction.product_id.label("product_id"),
+            func.max(ProductTransaction.created_at).label("last_tx_at")
+        ).filter(
+            ProductTransaction.merchant_id == merchant_id
+        ).group_by(
+            ProductTransaction.product_id
+        ).subquery()
+
+        rows = db.query(
+            Product.id,
+            Product.sub_category_id,
+            Product.brand,
+            Product.name,
+            Product.current_quantity,
+            last_tx_subquery.c.last_tx_at
+        ).outerjoin(
+            last_tx_subquery, last_tx_subquery.c.product_id == Product.id
+        ).filter(
+            Product.merchant_id == merchant_id,
+            Product.is_active == True,
+            Product.current_quantity > 0,
+            or_(
+                last_tx_subquery.c.last_tx_at.is_(None),
+                last_tx_subquery.c.last_tx_at < dead_stock_cutoff
+            )
+        ).order_by(
+            last_tx_subquery.c.last_tx_at.asc()
+        ).limit(safe_limit).all()
+
+        items = []
+        for row in rows:
+            stale_days = None
+            if row.last_tx_at:
+                stale_days = max(0, (datetime.now(timezone.utc) - row.last_tx_at.replace(tzinfo=timezone.utc)).days)
+                last_movement = row.last_tx_at.strftime("%d %b %Y")
+            else:
+                last_movement = "No movement"
+            items.append(
+                {
+                    "product_id": str(row.id),
+                    "sub_category_id": str(row.sub_category_id) if row.sub_category_id else None,
+                    "brand": (row.brand or "").strip(),
+                    "product_name": (row.name or "").strip(),
+                    "name": _brand_product_label(row.brand, row.name),
+                    "last_movement": last_movement,
+                    "last_movement_at": row.last_tx_at.isoformat() if row.last_tx_at else None,
+                    "days_since_movement": stale_days,
+                    "current_stock": int(row.current_quantity or 0),
+                }
+            )
+
+    return {
+        "list_type": normalized_type,
+        "limit": safe_limit,
+        "total_count": len(items),
+        "items": items,
     }
 
 
@@ -2188,6 +2510,7 @@ async def get_product_detail(
             "id": str(product.id),
             "sub_category_id": str(product.sub_category_id),
             "sub_category_name": sub_category.name if sub_category else "",
+            "size_mm": f"{sub_category.height_mm}mm x {sub_category.width_mm}mm" if sub_category else "",
             "brand": product.brand,
             "name": product.name,
             "sku": product.sku,
@@ -2518,7 +2841,8 @@ async def get_product_transactions(
     product_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    limit: int = 50
+    limit: int = 50,
+    normalized: bool = False,
 ):
     """Get transaction history for a product"""
     require_merchant_read_access(current_user)
@@ -2541,9 +2865,12 @@ async def get_product_transactions(
     ).order_by(ProductTransaction.created_at.desc()).limit(limit).all()
     
     transaction_list = []
+    review = analyze_product_transactions(transactions, product.current_quantity or 0) if normalized else None
+    review_by_id = {row.txn_id: row for row in review.rows} if review else {}
     for txn in transactions:
         # Get user who made the transaction
         user = db.query(User).filter(User.id == txn.user_id).first()
+        normalized_row = review_by_id.get(str(txn.id))
         
         transaction_list.append({
             "id": str(txn.id),
@@ -2551,9 +2878,13 @@ async def get_product_transactions(
             "quantity": txn.quantity,
             "quantity_before": txn.quantity_before,
             "quantity_after": txn.quantity_after,
+            "normalized_quantity_before": normalized_row.normalized_before if normalized_row else None,
+            "normalized_quantity_after": normalized_row.normalized_after if normalized_row else None,
+            "normalized_transaction_type": normalized_row.effective_type if normalized_row else None,
+            "delta_issue": normalized_row.delta_issue if normalized_row else "",
             "notes": txn.notes,
             "created_at": txn.created_at.isoformat(),
-            "created_by": user.username if user else "Unknown"
+            "created_by": _user_display_name(user)
         })
     
     return {
@@ -2564,7 +2895,22 @@ async def get_product_transactions(
             "current_quantity": product.current_quantity
         },
         "transactions": transaction_list,
-        "total_count": len(transaction_list)
+        "total_count": len(transaction_list),
+        "normalized": normalized,
+        "normalized_opening_balance": review.opening_balance if review else None,
+        "normalized_baseline_opening_balance": review.baseline_opening_balance if review else None,
+        "normalized_reconciliation_gap": review.reconciliation_gap if review else None,
+        "normalized_has_issues": (
+            bool(
+                review.has_ambiguous_rows
+                or review.has_negative_after_normalize
+                or review.baseline_opening_balance < 0
+                or review.reconciliation_gap != 0
+                or review.projected_final != int(product.current_quantity or 0)
+            )
+            if review
+            else None
+        ),
     }
 
 @api_router.get("/dealer/products/{product_id}/activity-log")
@@ -2605,7 +2951,7 @@ async def get_product_activity_log(
             "changes": activity.changes,
             "description": activity.description,
             "created_at": activity.created_at.isoformat(),
-            "created_by": user.username if user else "Unknown"
+            "created_by": _user_display_name(user)
         })
     
     return {

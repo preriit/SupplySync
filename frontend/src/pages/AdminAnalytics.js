@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import AdminLayout from '../components/AdminLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import api from '../utils/api';
+import SectionHeader from '@/components/theme/SectionHeader';
 
 const DEFAULT_ANALYTICS = {
   kpis: {
@@ -43,12 +44,13 @@ const AdminAnalytics = () => {
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-display font-bold text-white mb-2">Inventory Analytics</h1>
-          <p className="text-slate-400">
-            Fast movers, dead stock and stock rotation over the last {kpis.period_days} days.
-          </p>
-        </div>
+        <SectionHeader
+          title="Inventory Analytics"
+          subtitle={`Fast movers, dead stock and stock rotation over the last ${kpis.period_days} days.`}
+          className="mb-0"
+          titleClassName="text-3xl font-display font-bold text-white"
+          subtitleClassName="mt-1 text-slate-400"
+        />
 
         {error && (
           <Card className="bg-red-500/10 border-red-500/30">

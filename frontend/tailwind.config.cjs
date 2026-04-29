@@ -12,19 +12,36 @@ module.exports = {
         display: ['Manrope', 'system-ui', 'sans-serif'],
       },
       colors: {
+        // Existing palette aliases retained for compatibility with current pages.
         orange: {
-          DEFAULT: '#EA580C',
-          dark: '#C2410C',
+          DEFAULT: 'hsl(var(--brand))',
+          dark: 'hsl(var(--brand-hover))',
           light: '#FB923C',
         },
         slate: {
-          DEFAULT: '#0F172A',
-          light: '#334155',
+          DEFAULT: 'hsl(var(--text-strong))',
+          light: 'hsl(var(--text-muted))',
         },
         grey: {
-          50: '#F8FAFC',
+          50: 'hsl(var(--app-bg))',
           100: '#F1F5F9',
           200: '#E2E8F0',
+        },
+        app: {
+          bg: 'hsl(var(--app-bg))',
+          surface: 'hsl(var(--surface-1))',
+          muted: 'hsl(var(--surface-2))',
+          sidebar: 'hsl(var(--surface-sidebar))',
+          'sidebar-hover': 'hsl(var(--surface-sidebar-hover))',
+          'sidebar-active': 'hsl(var(--surface-sidebar-active))',
+          border: 'hsl(var(--border-soft))',
+          'border-strong': 'hsl(var(--border-strong))',
+          text: 'hsl(var(--text-strong))',
+          'text-muted': 'hsl(var(--text-muted))',
+          'text-on-dark': 'hsl(var(--text-on-dark))',
+          success: 'hsl(var(--success))',
+          warning: 'hsl(var(--warning))',
+          danger: 'hsl(var(--danger))',
         },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
@@ -70,11 +87,16 @@ module.exports = {
       boxShadow: {
         card: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
         'card-hover': '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+        soft: 'var(--shadow-soft)',
+        panel: 'var(--shadow-card)',
       },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+        card: 'var(--radius-card)',
+        input: 'var(--radius-input)',
+        pill: 'var(--radius-pill)',
       },
       keyframes: {
         'accordion-down': {

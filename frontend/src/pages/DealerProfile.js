@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import DealerNav from '../components/DealerNav';
+import DealerPageShell from '../components/DealerPageShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,8 @@ import {
 } from '@/components/ui/select';
 import { User, Save, CheckCircle2, AlertCircle, Pencil, X } from 'lucide-react';
 import api from '../utils/api';
+import SectionHeader from '@/components/theme/SectionHeader';
+import AppBreadcrumb from '@/components/theme/AppBreadcrumb';
 
 const DealerProfile = () => {
   const [loading, setLoading] = useState(true);
@@ -131,13 +133,17 @@ const DealerProfile = () => {
   };
 
   return (
-    <div className="min-h-screen bg-grey-50">
-      <DealerNav />
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-display font-bold text-slate">Profile</h1>
-          <p className="text-slate-light mt-1">Manage your account details.</p>
-        </div>
+    <DealerPageShell contentClassName="max-w-4xl mx-auto px-4 py-8">
+        <AppBreadcrumb
+          items={[
+            { label: 'Home', to: '/dealer/dashboard' },
+            { label: 'Settings', to: '/dealer/profile' },
+          ]}
+        />
+        <SectionHeader
+          title="Profile"
+          subtitle="Manage your account details."
+        />
 
         {/* Implementation plan notes (requested):
            Phase 1 (implemented): profile read/update for username, phone, preferred language.
@@ -242,8 +248,7 @@ const DealerProfile = () => {
             )}
           </CardContent>
         </Card>
-      </div>
-    </div>
+    </DealerPageShell>
   );
 };
 

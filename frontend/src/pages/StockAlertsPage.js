@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import DealerNav from '../components/DealerNav';
+import DealerPageShell from '../components/DealerPageShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, ArrowLeft, ShoppingBag, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertTriangle, ShoppingBag, ChevronDown, ChevronUp } from 'lucide-react';
 import api from '../utils/api';
+import SectionHeader from '@/components/theme/SectionHeader';
+import StatusChip from '@/components/theme/StatusChip';
+import { EmptyStatePanel, ListPageSkeleton } from '@/components/theme/PageStates';
+import AppBreadcrumb from '@/components/theme/AppBreadcrumb';
 
 const StockAlertsPage = () => {
   const navigate = useNavigate();
@@ -77,48 +81,28 @@ const StockAlertsPage = () => {
   );
 
   return (
-    <div className="min-h-screen bg-grey-50">
-      <DealerNav />
-
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <Button
-          variant="ghost"
-          onClick={() => navigate('/dealer/dashboard')}
-          className="mb-6 text-orange hover:text-orange-dark"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Dashboard
-        </Button>
-
-        <div className="mb-6">
-          <h1 className="text-3xl font-display font-bold text-slate">
-            {isOutOfStock ? 'Out of Stock Products' : 'Low Stock Products'}
-          </h1>
-          <p className="text-slate-light mt-1">
-            {loading ? 'Loading...' : `${data.total_products} product(s) need attention`}
-          </p>
-        </div>
+    <DealerPageShell>
+        <AppBreadcrumb
+          items={[
+            { label: 'Home', to: '/dealer/dashboard' },
+            { label: 'Stock Alerts', to: `/dealer/stock-alerts?stock=${stockType}` },
+          ]}
+        />
+        <SectionHeader
+          title={isOutOfStock ? 'Out of Stock Products' : 'Low Stock Products'}
+          subtitle={loading ? 'Loading...' : `${data.total_products} product(s) need attention`}
+        />
 
         {loading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange mx-auto"></div>
-          </div>
+          <ListPageSkeleton cards={6} />
         ) : data.groups.length === 0 ? (
-          <Card className="border-2 border-dashed border-gray-300">
-            <CardContent className="p-12 text-center">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                {isOutOfStock ? (
-                  <ShoppingBag className="h-8 w-8 text-gray-400" />
-                ) : (
-                  <AlertTriangle className="h-8 w-8 text-gray-400" />
-                )}
-              </div>
-              <h3 className="text-lg font-semibold text-slate mb-2">
-                No matching products found
-              </h3>
-              <p className="text-slate-light">Everything looks healthy for this stock segment.</p>
-            </CardContent>
-          </Card>
+          <EmptyStatePanel
+            icon={isOutOfStock
+              ? <ShoppingBag className="h-8 w-8 text-gray-400" />
+              : <AlertTriangle className="h-8 w-8 text-gray-400" />}
+            title="No matching products found"
+            description="Everything looks healthy for this stock segment."
+          />
         ) : (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-2">
@@ -158,9 +142,9 @@ const StockAlertsPage = () => {
                             <p className="text-xs text-orange font-semibold uppercase tracking-wide mt-1">{product.brand}</p>
                             <p className="font-medium text-slate">{product.name}</p>
                           </div>
-                          <p className={`font-semibold ${product.current_quantity === 0 ? 'text-red-600' : 'text-yellow-600'}`}>
+                          <StatusChip tone={product.current_quantity === 0 ? 'danger' : 'warning'}>
                             {product.current_quantity} boxes
-                          </p>
+                          </StatusChip>
                         </div>
                       </button>
                     ))}
@@ -215,9 +199,9 @@ const StockAlertsPage = () => {
                               <p className="text-xs text-orange font-semibold uppercase tracking-wide">{product.brand}</p>
                               <p className="font-medium text-slate">{product.name}</p>
                             </div>
-                            <p className={`font-semibold ${product.current_quantity === 0 ? 'text-red-600' : 'text-yellow-600'}`}>
+                            <StatusChip tone={product.current_quantity === 0 ? 'danger' : 'warning'}>
                               {product.current_quantity} boxes
-                            </p>
+                            </StatusChip>
                           </div>
                         </button>
                       ))}
@@ -230,8 +214,7 @@ const StockAlertsPage = () => {
             )}
           </div>
         )}
-      </div>
-    </div>
+    </DealerPageShell>
   );
 };
 

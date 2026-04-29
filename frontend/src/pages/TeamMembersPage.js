@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import DealerNav from '../components/DealerNav';
+import DealerPageShell from '../components/DealerPageShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import api from '../utils/api';
+import SectionHeader from '@/components/theme/SectionHeader';
+import AppBreadcrumb from '@/components/theme/AppBreadcrumb';
 
 const INITIAL_CREATE_FORM = {
   name: '',
@@ -471,15 +473,18 @@ const TeamMembersPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-grey-50">
-      <DealerNav />
-      <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
-        <div>
-          <h1 className="text-3xl font-display font-bold text-slate">Team Members</h1>
-          <p className="text-slate-light mt-1">
-            Add and manage staff linked to your merchant account.
-          </p>
-        </div>
+    <DealerPageShell contentClassName="max-w-6xl mx-auto px-4 py-8 space-y-6">
+        <AppBreadcrumb
+          items={[
+            { label: 'Home', to: '/dealer/dashboard' },
+            { label: 'Team Members', to: '/dealer/team-members' },
+          ]}
+        />
+        <SectionHeader
+          title="Team Members"
+          subtitle="Add and manage staff linked to your merchant account."
+          className="mb-0"
+        />
 
         <Card>
           <CardHeader>
@@ -788,8 +793,7 @@ const TeamMembersPage = () => {
             )}
           </CardContent>
         </Card>
-      </div>
-    </div>
+    </DealerPageShell>
   );
 };
 

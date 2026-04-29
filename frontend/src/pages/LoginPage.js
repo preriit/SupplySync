@@ -153,28 +153,35 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-grey-50">
-      <div className="w-full max-w-md px-4">
-        {/* Logo/Brand */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-display font-bold text-orange mb-2">
-            {t('common:app_name')}
-          </h1>
-          <p className="text-slate-light">
-            {t('common:welcome')}
-          </p>
+    <div className="min-h-screen bg-[#F6F7FB] p-4 md:p-8">
+      <div className="mx-auto max-w-[1280px] min-h-[calc(100vh-2rem)] rounded-2xl border border-app-border bg-white overflow-hidden grid grid-cols-1 lg:grid-cols-2">
+        <div className="hidden lg:flex flex-col justify-between p-10 bg-[#FAFBFD] border-r border-app-border">
+          <div>
+            <h1 className="text-4xl font-display font-bold text-orange mb-10">{t('common:app_name')}</h1>
+            <h2 className="text-5xl font-display font-bold text-slate leading-tight">
+              Smart inventory.
+              <br />
+              Stronger business.
+            </h2>
+            <p className="text-slate-light mt-4 text-lg">
+              Real-time control over your stock, anytime, anywhere.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-4 text-sm text-slate-light">
+            <div><p className="font-semibold text-slate">Track Stock</p><p>in Real Time</p></div>
+            <div><p className="font-semibold text-slate">Reduce Losses</p><p>& Save More</p></div>
+            <div><p className="font-semibold text-slate">Make Smarter</p><p>Decisions</p></div>
+          </div>
         </div>
 
-        {/* Login Card */}
-        <Card>
-          <CardHeader>
+        <div className="flex items-center justify-center p-6 md:p-10">
+        <Card className="w-full max-w-lg border-app-border rounded-2xl shadow-panel">
+          <CardHeader className="text-center">
             <CardTitle className="text-2xl font-display">
-              {t('auth:login')}
+              Welcome back!
             </CardTitle>
             <CardDescription>
-              {loginMethod === 'password'
-                ? 'Enter your credentials to access your account'
-                : 'Use mobile OTP to access your account'}
+              Login to your account
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -190,10 +197,10 @@ const LoginPage = () => {
                 </Alert>
               )}
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 border-b border-app-border pb-1">
                 <Button
                   type="button"
-                  variant={loginMethod === 'password' ? 'default' : 'outline'}
+                  variant="ghost"
                   onClick={() => {
                     setLoginMethod('password');
                     setOtpRequested(false);
@@ -203,12 +210,13 @@ const LoginPage = () => {
                     setInfoMessage('');
                   }}
                   disabled={loading}
+                  className={`rounded-none ${loginMethod === 'password' ? 'text-orange border-b-2 border-orange' : 'text-slate-light'}`}
                 >
                   Password
                 </Button>
                 <Button
                   type="button"
-                  variant={loginMethod === 'otp' ? 'default' : 'outline'}
+                  variant="ghost"
                   onClick={() => {
                     setLoginMethod('otp');
                     setPassword('');
@@ -216,6 +224,7 @@ const LoginPage = () => {
                     setInfoMessage('');
                   }}
                   disabled={loading}
+                  className={`rounded-none ${loginMethod === 'otp' ? 'text-orange border-b-2 border-orange' : 'text-slate-light'}`}
                 >
                   OTP
                 </Button>
@@ -273,7 +282,7 @@ const LoginPage = () => {
 
               <Button 
                 type="submit" 
-                className="w-full bg-orange hover:bg-orange-dark"
+                className="w-full bg-orange hover:bg-orange-dark rounded-md"
                 disabled={loading}
               >
                 {loading
@@ -307,6 +316,7 @@ const LoginPage = () => {
             </p>
           </CardFooter>
         </Card>
+        </div>
       </div>
     </div>
   );

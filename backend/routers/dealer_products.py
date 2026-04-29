@@ -29,6 +29,7 @@ from services.product_snapshots import (
     snapshot_labels_for_new_product,
 )
 from services.subcategory_defaults import resolve_dealer_subcategory_defaults
+from services.transaction_reconciliation import analyze_product_transactions
 
 router = APIRouter(prefix="/dealer", tags=["dealer"])
 
@@ -54,6 +55,31 @@ def _set_product_box_coverage(product: Product, db: Session) -> None:
     product.coverage_per_box_sqm, product.coverage_per_box_sqft = coverage_per_box_from_pc(
         pc_sqm, pc_sqft, product.packing_per_box
     )
+
+
+def _looks_like_phone_identifier(value: str | None) -> bool:
+    if not value:
+        return False
+    compact = str(value).strip().replace(" ", "").replace("-", "")
+    if compact.startswith("+"):
+        compact = compact[1:]
+    return compact.isdigit() and len(compact) >= 7
+
+
+def _user_display_name(user: User | None) -> str:
+    if not user:
+        return "Unknown"
+    username = (user.username or "").strip()
+    email = (user.email or "").strip()
+    if username and not _looks_like_phone_identifier(username):
+        return username
+    if email:
+        return email
+    if username:
+        return username
+    if user.phone:
+        return str(user.phone)
+    return "Unknown"
 
 
 @router.post("/products")
@@ -260,6 +286,7 @@ async def get_product_detail(
             "id": str(product.id),
             "sub_category_id": str(product.sub_category_id),
             "sub_category_name": sub_category.name if sub_category else "",
+            "size_mm": f"{sub_category.height_mm}mm x {sub_category.width_mm}mm" if sub_category else "",
             "brand": product.brand,
             "name": product.name,
             "sku": product.sku,
@@ -586,6 +613,7 @@ async def get_product_transactions(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     limit: int = 50,
+    normalized: bool = False,
 ):
     if current_user.user_type != "dealer":
         raise HTTPException(
@@ -616,8 +644,11 @@ async def get_product_transactions(
     )
 
     transaction_list = []
+    review = analyze_product_transactions(transactions, product.current_quantity or 0) if normalized else None
+    review_by_id = {row.txn_id: row for row in review.rows} if review else {}
     for txn in transactions:
         user = db.query(User).filter(User.id == txn.user_id).first()
+        normalized_row = review_by_id.get(str(txn.id))
         transaction_list.append(
             {
                 "id": str(txn.id),
@@ -625,9 +656,13 @@ async def get_product_transactions(
                 "quantity": txn.quantity,
                 "quantity_before": txn.quantity_before,
                 "quantity_after": txn.quantity_after,
+                "normalized_quantity_before": normalized_row.normalized_before if normalized_row else None,
+                "normalized_quantity_after": normalized_row.normalized_after if normalized_row else None,
+                "normalized_transaction_type": normalized_row.effective_type if normalized_row else None,
+                "delta_issue": normalized_row.delta_issue if normalized_row else "",
                 "notes": txn.notes,
                 "created_at": txn.created_at.isoformat(),
-                "created_by": user.username if user else "Unknown",
+                "created_by": _user_display_name(user),
             }
         )
 
@@ -640,6 +675,21 @@ async def get_product_transactions(
         },
         "transactions": transaction_list,
         "total_count": len(transaction_list),
+        "normalized": normalized,
+        "normalized_opening_balance": review.opening_balance if review else None,
+        "normalized_baseline_opening_balance": review.baseline_opening_balance if review else None,
+        "normalized_reconciliation_gap": review.reconciliation_gap if review else None,
+        "normalized_has_issues": (
+            bool(
+                review.has_ambiguous_rows
+                or review.has_negative_after_normalize
+                or review.baseline_opening_balance < 0
+                or review.reconciliation_gap != 0
+                or review.projected_final != int(product.current_quantity or 0)
+            )
+            if review
+            else None
+        ),
     }
 
 
@@ -688,7 +738,7 @@ async def get_product_activity_log(
                 "changes": activity.changes,
                 "description": activity.description,
                 "created_at": activity.created_at.isoformat(),
-                "created_by": user.username if user else "Unknown",
+                "created_by": _user_display_name(user),
             }
         )
 

@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import DealerNav from '../components/DealerNav';
+import DealerPageShell from '../components/DealerPageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
-  ArrowLeft, Edit, Trash2, Save, X, Package, Grid3x3, 
-  Box, Calendar, History, Plus, FileEdit, ArrowUp, ArrowDown, RefreshCw
+  Edit, Trash2, Save, X, Package, Grid3x3, 
+  Box, Calendar, History, Plus, FileEdit, ArrowUp, ArrowDown, RefreshCw, ArrowLeft
 } from 'lucide-react';
 import {
   Select,
@@ -42,6 +42,9 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import api from '../utils/api';
 import ImageUpload from '../components/ImageUpload';
+import SectionHeader from '@/components/theme/SectionHeader';
+import StatusChip from '@/components/theme/StatusChip';
+import AppBreadcrumb from '@/components/theme/AppBreadcrumb';
 
 const ProductDetail = () => {
   const navigate = useNavigate();
@@ -80,11 +83,13 @@ const ProductDetail = () => {
   
   // Product images
   const [images, setImages] = useState([]);
+  const [recentTransactions, setRecentTransactions] = useState([]);
 
   useEffect(() => {
     fetchProduct();
     fetchReferenceData();
     fetchImages();
+    fetchRecentTransactions();
   }, [productId]);
   
   const fetchImages = async () => {
@@ -93,6 +98,15 @@ const ProductDetail = () => {
       setImages(response.data);
     } catch (error) {
       console.error('Error fetching images:', error);
+    }
+  };
+
+  const fetchRecentTransactions = async () => {
+    try {
+      const response = await api.get(`/dealer/products/${productId}/transactions`);
+      setRecentTransactions((response.data?.transactions || []).slice(0, 5));
+    } catch (error) {
+      setRecentTransactions([]);
     }
   };
 
@@ -274,371 +288,332 @@ const ProductDetail = () => {
     }
   };
 
+  const getStockStatus = (qty) => {
+    if ((qty || 0) <= 0) return { label: 'Out of Stock', tone: 'danger' };
+    if ((qty || 0) < 20) return { label: 'Low Stock', tone: 'warning' };
+    return { label: 'In Stock', tone: 'success' };
+  };
+
+  const formatDateTimeDDMMYYYY = (value) => {
+    if (!value) return 'N/A';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return `${day}/${month}/${year} ${time}`;
+  };
+  const productSizeLabel = product?.size_mm || 'N/A';
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <DealerNav />
+      <DealerPageShell>
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange"></div>
           </div>
         </div>
-      </div>
+      </DealerPageShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <DealerNav />
-      
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-6">
-          <Button
-            variant="ghost"
-            onClick={() => navigate(`/dealer/inventory/${subcategoryId}/products`)}
-            className="mb-4"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Products
-          </Button>
-          
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-display font-bold text-slate">
-                {product.brand} - {product.name}
-              </h1>
-              <p className="text-slate-light mt-1">Product Details</p>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              {!isEditing ? (
-                <>
+    <DealerPageShell>
+        <AppBreadcrumb
+          items={[
+            { label: 'Home', to: '/dealer/dashboard' },
+            { label: 'Inventory', to: '/dealer/inventory' },
+            { label: 'Products', to: `/dealer/inventory/${subcategoryId}/products` },
+            { label: 'Product Detail', to: `/dealer/inventory/${subcategoryId}/products/${productId}` },
+          ]}
+        />
+        {/* Header and metadata strip keep ProductList rhythm */}
+        <div className="mb-5">
+          <SectionHeader
+            title={(
+              <div className="flex items-center gap-2">
+                <span>{`${product.brand} - ${product.name}`}</span>
+                <StatusChip tone={getStockStatus(product.current_quantity).tone}>
+                  {getStockStatus(product.current_quantity).label}
+                </StatusChip>
+              </div>
+            )}
+            subtitle={(
+              <span className="text-sm text-slate-light">
+                {`${product.sub_category_name || 'N/A'} | ${product.surface_type || 'N/A'} | ${productSizeLabel}`}
+              </span>
+            )}
+            actions={!isEditing ? (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(`/dealer/inventory/${subcategoryId}/products`)}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to Products
+                </Button>
+                {canWriteInventory && (
+                  <Button
+                    onClick={handleEdit}
+                    className="bg-orange hover:bg-orange-dark text-white"
+                  >
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit Product
+                  </Button>
+                )}
+                {canDeleteInventory && (
                   <Button
                     variant="outline"
-                    onClick={viewTransactionHistory}
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="text-red-600 hover:bg-red-50 border-red-200"
                   >
-                    <History className="mr-2 h-4 w-4" />
-                    History
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
                   </Button>
-                  {canWriteInventory && (
-                    <Button
-                      onClick={handleEdit}
-                      className="bg-orange hover:bg-orange-dark text-white"
-                    >
-                      <Edit className="mr-2 h-4 w-4" />
-                      Edit
-                    </Button>
-                  )}
-                  {canDeleteInventory && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowDeleteConfirm(true)}
-                      className="text-red-600 hover:bg-red-50 border-red-200"
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </Button>
-                  )}
-                </>
-              ) : (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={handleCancelEdit}
-                    disabled={saving}
-                  >
-                    <X className="mr-2 h-4 w-4" />
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="bg-green-500 hover:bg-green-600 text-white"
-                  >
-                    <Save className="mr-2 h-4 w-4" />
-                    {saving ? 'Saving...' : 'Save Changes'}
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Product Information */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Details Card */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Product Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Brand & Name */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-slate mb-2 block">
-                    Brand
-                  </label>
-                  {isEditing ? (
-                    <Input
-                      value={formData.brand}
-                      onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                      placeholder="Enter brand name"
-                    />
-                  ) : (
-                    <p className="text-lg text-slate">{product.brand}</p>
-                  )}
-                </div>
-                
-                <div>
-                  <label className="text-sm font-medium text-slate mb-2 block">
-                    Product Name
-                  </label>
-                  {isEditing ? (
-                    <Input
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Enter product name"
-                    />
-                  ) : (
-                    <p className="text-lg text-slate">{product.name}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* SKU */}
-              <div>
-                <label className="text-sm font-medium text-slate mb-2 block">
-                  SKU Code (Optional)
-                </label>
-                {isEditing ? (
-                  <Input
-                    value={formData.sku || ''}
-                    onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                    placeholder="Enter SKU code"
-                  />
-                ) : (
-                  <p className="text-lg text-slate">{product.sku || 'Not set'}</p>
                 )}
               </div>
-
-              {/* Attributes */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Surface Type */}
-                <div>
-                  <label className="text-sm font-medium text-slate mb-2 block">
-                    Surface Type
-                  </label>
-                  {isEditing ? (
-                    <Select
-                      value={formData.surface_type_id}
-                      onValueChange={(value) => setFormData({ ...formData, surface_type_id: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {surfaceTypes.map((type) => (
-                          <SelectItem key={type.id} value={type.id}>
-                            {type.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Badge variant="outline" className="border-orange text-orange">
-                      {product.surface_type}
-                    </Badge>
-                  )}
-                </div>
-
-                {/* Application Type */}
-                <div>
-                  <label className="text-sm font-medium text-slate mb-2 block">
-                    Application
-                  </label>
-                  {isEditing ? (
-                    <Select
-                      value={formData.application_type_id}
-                      onValueChange={(value) => setFormData({ ...formData, application_type_id: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {applicationTypes.map((type) => (
-                          <SelectItem key={type.id} value={type.id}>
-                            {type.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Badge variant="outline">{product.application_type}</Badge>
-                  )}
-                </div>
-
-                {/* Body Type */}
-                <div>
-                  <label className="text-sm font-medium text-slate mb-2 block">
-                    Body Type
-                  </label>
-                  {isEditing ? (
-                    <Select
-                      value={formData.body_type_id}
-                      onValueChange={(value) => setFormData({ ...formData, body_type_id: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {bodyTypes.map((type) => (
-                          <SelectItem key={type.id} value={type.id}>
-                            {type.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Badge variant="outline">{product.body_type}</Badge>
-                  )}
-                </div>
-
-                {/* Quality */}
-                <div>
-                  <label className="text-sm font-medium text-slate mb-2 block">
-                    Quality
-                  </label>
-                  {isEditing ? (
-                    <Select
-                      value={formData.quality_id}
-                      onValueChange={(value) => setFormData({ ...formData, quality_id: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {qualities.map((quality) => (
-                          <SelectItem key={quality.id} value={quality.id}>
-                            {quality.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Badge variant="outline">{product.quality}</Badge>
-                  )}
-                </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleCancelEdit}
+                  disabled={saving}
+                >
+                  <X className="mr-2 h-4 w-4" />
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="bg-green-500 hover:bg-green-600 text-white"
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </Button>
               </div>
-
-              {/* Packing */}
-              <div>
-                <label className="text-sm font-medium text-slate mb-2 block">
-                  Packing (pieces per box)
-                </label>
-                {isEditing ? (
-                  <Input
-                    type="number"
-                    min="1"
-                    value={formData.packing_per_box}
-                    onChange={(e) => setFormData({ ...formData, packing_per_box: parseInt(e.target.value) })}
-                  />
-                ) : (
-                  <p className="text-lg text-slate">{product.packing_per_box} pieces/box</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Sidebar - Stock & Metadata */}
-          <div className="space-y-6">
-            {/* Stock Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Package className="h-5 w-5 text-orange" />
-                  <span>Current Stock</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-slate">
-                    {product.current_quantity}
-                  </div>
-                  <div className="text-sm text-slate-light mt-1">boxes</div>
-                  <p className="text-xs text-slate-light mt-2">
-                    Use transaction buttons to add/subtract
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Category Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Grid3x3 className="h-5 w-5 text-orange" />
-                  <span>Category</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-slate-light mb-1">Sub-Category</p>
-                <p className="text-lg font-medium text-slate">{product.sub_category_name}</p>
-              </CardContent>
-            </Card>
-
-            {/* Metadata Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Calendar className="h-5 w-5 text-orange" />
-                  <span>Metadata</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <p className="text-xs text-slate-light">Created</p>
-                  <p className="text-sm text-slate">
-                    {product.created_at ? new Date(product.created_at).toLocaleDateString() : 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-light">Last Updated</p>
-                  <p className="text-sm text-slate">
-                    {product.updated_at ? new Date(product.updated_at).toLocaleDateString() : 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-light">Product ID</p>
-                  <p className="text-xs font-mono text-slate break-all">{product.id.substring(0, 16)}...</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+            )}
+            className="mb-2"
+          />
         </div>
 
-        {/* Product Images Section */}
-        <div className="mt-8">
-          <Card>
+        {/* Main content only: four operational cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          {/* A) Product Images */}
+          <Card className="border-app-border shadow-none">
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Package className="h-5 w-5 text-orange" />
-                <span>Product Images</span>
-              </CardTitle>
-              <p className="text-sm text-slate-light mt-1">
-                Upload product images with automatic color extraction
-              </p>
+              <CardTitle>Product Images</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ImageUpload 
-                productId={productId} 
+            <CardContent className="space-y-3">
+              <div className="aspect-video rounded-md border border-app-border bg-slate-50 overflow-hidden">
+                {images?.[0]?.image_url ? (
+                  <img src={images[0].image_url} alt="Primary product" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-xs text-slate-light">No image</div>
+                )}
+              </div>
+              {images.length > 1 ? (
+                <div className="grid grid-cols-4 gap-2">
+                  {images.slice(0, 4).map((img) => (
+                    <div key={img.id} className="aspect-square rounded border border-app-border overflow-hidden">
+                      <img src={img.image_url} alt="Thumbnail" className="h-full w-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <ImageUpload
+                productId={productId}
                 images={images}
                 onImagesChange={setImages}
               />
             </CardContent>
           </Card>
+
+          {/* B) Product Information */}
+          <Card className="border-app-border shadow-none">
+            <CardHeader>
+              <CardTitle>Product Information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div>
+                <span className="text-slate-light">Name:</span>{' '}
+                {isEditing ? (
+                  <Input
+                    className="mt-1 h-9"
+                    value={formData.name || ''}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  />
+                ) : (
+                  <span className="text-slate">{product.name}</span>
+                )}
+              </div>
+              <div>
+                <span className="text-slate-light">Brand:</span>{' '}
+                {isEditing ? (
+                  <Input
+                    className="mt-1 h-9"
+                    value={formData.brand || ''}
+                    onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                  />
+                ) : (
+                  <span className="text-slate">{product.brand}</span>
+                )}
+              </div>
+              <div><span className="text-slate-light">Sub-category:</span> <span className="text-slate">{product.sub_category_name}</span></div>
+              <div>
+                <span className="text-slate-light">Surface:</span>{' '}
+                {isEditing ? (
+                  <Select
+                    value={formData.surface_type_id}
+                    onValueChange={(value) => setFormData({ ...formData, surface_type_id: value })}
+                  >
+                    <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {surfaceTypes.map((type) => (
+                        <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <span className="text-slate">{product.surface_type}</span>
+                )}
+              </div>
+              <div>
+                <span className="text-slate-light">Body Type:</span>{' '}
+                {isEditing ? (
+                  <Select
+                    value={formData.body_type_id}
+                    onValueChange={(value) => setFormData({ ...formData, body_type_id: value })}
+                  >
+                    <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {bodyTypes.map((type) => (
+                        <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <span className="text-slate">{product.body_type}</span>
+                )}
+              </div>
+              <div>
+                <span className="text-slate-light">Application:</span>{' '}
+                {isEditing ? (
+                  <Select
+                    value={formData.application_type_id}
+                    onValueChange={(value) => setFormData({ ...formData, application_type_id: value })}
+                  >
+                    <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {applicationTypes.map((type) => (
+                        <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <span className="text-slate">{product.application_type}</span>
+                )}
+              </div>
+              <div>
+                <span className="text-slate-light">Quality:</span>{' '}
+                {isEditing ? (
+                  <Select
+                    value={formData.quality_id}
+                    onValueChange={(value) => setFormData({ ...formData, quality_id: value })}
+                  >
+                    <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {qualities.map((quality) => (
+                        <SelectItem key={quality.id} value={quality.id}>{quality.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <span className="text-slate">{product.quality}</span>
+                )}
+              </div>
+              <div>
+                <span className="text-slate-light">Packing:</span>{' '}
+                {isEditing ? (
+                  <Input
+                    className="mt-1 h-9"
+                    type="number"
+                    min="1"
+                    value={formData.packing_per_box || ''}
+                    onChange={(e) => setFormData({ ...formData, packing_per_box: parseInt(e.target.value, 10) || '' })}
+                  />
+                ) : (
+                  <span className="text-slate">{product.packing_per_box} pieces/box</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* C) Stock Overview */}
+          <Card className="border-app-border shadow-none">
+            <CardHeader>
+              <CardTitle>Stock Overview</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-center">
+                <p className="text-4xl font-bold text-slate">{product.current_quantity}</p>
+                <p className="text-sm text-slate-light">boxes in stock</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(`/dealer/inventory/${subcategoryId}/products`)}
+                >
+                  + Add Stock
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(`/dealer/inventory/${subcategoryId}/products`)}
+                >
+                  - Reduce Stock
+                </Button>
+              </div>
+              <p className="text-xs text-slate-light">
+                Uses existing transaction flow from Products list page.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* D) Recent Stock History */}
+          <Card className="border-app-border shadow-none">
+            <CardHeader>
+              <CardTitle>Recent Stock History</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {recentTransactions.length === 0 ? (
+                <p className="text-sm text-slate-light">No recent stock history.</p>
+              ) : (
+                recentTransactions.map((txn) => (
+                  <div key={txn.id} className="rounded border border-app-border px-3 py-2">
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`text-sm font-medium ${
+                          txn.transaction_type === 'add' ? 'text-green-700' : 'text-red-700'
+                        }`}
+                      >
+                        {txn.transaction_type === 'add' ? '+' : '-'} {txn.quantity} boxes
+                      </span>
+                      <span className="text-xs text-slate-light">
+                        {formatDateTimeDDMMYYYY(txn.created_at)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-light mt-1">By: {txn.created_by || 'Unknown'}</p>
+                  </div>
+                ))
+              )}
+              <Button variant="outline" className="w-full" onClick={viewTransactionHistory}>
+                <History className="mr-2 h-4 w-4" />
+                View Full History
+              </Button>
+            </CardContent>
+          </Card>
         </div>
-      </div>
+      
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
@@ -711,7 +686,7 @@ const ProductDetail = () => {
                                 {txn.transaction_type === 'add' ? '+' : '-'} {txn.quantity}
                               </Badge>
                               <span className="text-sm text-slate-light">
-                                {new Date(txn.created_at).toLocaleString()}
+                                {formatDateTimeDDMMYYYY(txn.created_at)}
                               </span>
                             </div>
                             <div className="mt-2 text-sm">
@@ -768,7 +743,7 @@ const ProductDetail = () => {
                                 {activity.activity_type.replace('_', ' ')}
                               </h4>
                               <span className="text-xs text-slate-light">
-                                {new Date(activity.created_at).toLocaleString()}
+                                {formatDateTimeDDMMYYYY(activity.created_at)}
                               </span>
                             </div>
                             
@@ -823,7 +798,7 @@ const ProductDetail = () => {
           </Tabs>
         </DialogContent>
       </Dialog>
-    </div>
+    </DealerPageShell>
   );
 };
 

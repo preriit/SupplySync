@@ -18,6 +18,7 @@ code {
 
 @layer base {
     :root {
+        /* Shadcn/system tokens */
         --background: 0 0% 100%;
         --foreground: 222 47% 11%;
         --card: 0 0% 100%;
@@ -43,6 +44,29 @@ code {
         --chart-4: 43 74% 66%;
         --chart-5: 27 87% 67%;
         --radius: 0.5rem;
+
+        /* SupplySync Phase-1 UI foundation tokens (semantic, app-specific) */
+        --app-bg: 220 20% 96%;
+        --surface-1: 0 0% 100%;
+        --surface-2: 220 22% 98%;
+        --surface-sidebar: 220 56% 13%;
+        --surface-sidebar-hover: 220 46% 19%;
+        --surface-sidebar-active: 22 95% 52%;
+        --text-strong: 222 47% 11%;
+        --text-muted: 215 16% 45%;
+        --text-on-dark: 0 0% 98%;
+        --brand: 22 92% 50%;
+        --brand-hover: 21 85% 44%;
+        --success: 144 58% 37%;
+        --warning: 38 92% 50%;
+        --danger: 0 84% 57%;
+        --border-soft: 214 23% 90%;
+        --border-strong: 215 18% 82%;
+        --shadow-soft: 0 10px 30px -20px rgb(15 23 42 / 0.35);
+        --shadow-card: 0 2px 8px rgb(15 23 42 / 0.06);
+        --radius-card: 0.875rem;
+        --radius-input: 0.625rem;
+        --radius-pill: 999px;
     }
     .dark {
         --background: 0 0% 3.9%;
@@ -78,6 +102,69 @@ code {
     }
     body {
         @apply bg-background text-foreground;
+        background-color: hsl(var(--app-bg));
+        color: hsl(var(--text-strong));
+    }
+}
+
+@layer components {
+    /*
+      Phase-1 reusable theme primitives.
+      These are intentionally generic so pages can opt-in without changing behavior.
+    */
+    .theme-surface {
+        background-color: hsl(var(--surface-1));
+        border: 1px solid hsl(var(--border-soft));
+        border-radius: var(--radius-card);
+        box-shadow: var(--shadow-card);
+    }
+
+    .theme-surface-muted {
+        background-color: hsl(var(--surface-2));
+        border: 1px solid hsl(var(--border-soft));
+        border-radius: var(--radius-card);
+    }
+
+    .theme-page {
+        background-color: hsl(var(--app-bg));
+        color: hsl(var(--text-strong));
+    }
+
+    .theme-heading {
+        color: hsl(var(--text-strong));
+        font-family: Manrope, Public Sans, system-ui, sans-serif;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+    }
+
+    .theme-muted {
+        color: hsl(var(--text-muted));
+    }
+
+    .theme-pill {
+        border-radius: var(--radius-pill);
+    }
+
+    .theme-focus-ring {
+        outline: none;
+        box-shadow: 0 0 0 3px hsl(var(--brand) / 0.22);
+    }
+}
+
+@layer base {
+    /*
+      Phase-5 accessibility polish:
+      unify keyboard focus treatment for interactive controls
+      without altering any functional behavior.
+    */
+    button:focus-visible,
+    [role="button"]:focus-visible,
+    a:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 3px hsl(var(--brand) / 0.22);
     }
 }
 
