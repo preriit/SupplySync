@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import DealerNav from '../components/DealerNav';
@@ -6,7 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Plus, Package, ArrowLeft, Grid3x3, Box, Minus, History, Trash2 } from 'lucide-react';
+import { Search, Plus, Package, ArrowLeft, Grid3x3, Minus, History, Trash2 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Dialog,
   DialogContent,
@@ -27,6 +34,19 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import api from '../utils/api';
+
+const DEFAULT_SORT_CONFIG = {
+  key: 'name',
+  direction: 'asc',
+};
+
+const SORT_OPTIONS = [
+  { key: 'name', label: 'Name' },
+  { key: 'brand', label: 'Brand' },
+  { key: 'quantity', label: 'Quantity' },
+  { key: 'status', label: 'Stock Status' },
+  { key: 'updated_at', label: 'Last Updated' },
+];
 
 const ProductsList = () => {
   const { t } = useTranslation(['inventory', 'common']);
@@ -60,18 +80,130 @@ const ProductsList = () => {
   const [transactionHistory, setTransactionHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const stockFilter = searchParams.get('stock');
+  const [localStockFilter, setLocalStockFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortConfig, setSortConfig] = useState(DEFAULT_SORT_CONFIG);
 
   // Dashboard can deep-link into this page with ?stock=low|out.
-  // Filtering is intentionally client-side because products are already fetched for a single subcategory.
-  const filteredProducts = products.filter((product) => {
-    if (stockFilter === 'low') {
-      return product.current_quantity > 0 && product.current_quantity < 20;
+  // Filtering stays client-side because this page already loads one subcategory's products.
+  const effectiveStockFilter = stockFilter || localStockFilter;
+  const filteredProducts = useMemo(() => {
+    const stockFiltered = products.filter((product) => {
+      if (effectiveStockFilter === 'low') {
+        return product.current_quantity > 0 && product.current_quantity < 20;
+      }
+      if (effectiveStockFilter === 'out') {
+        return product.current_quantity === 0;
+      }
+      return true;
+    });
+
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    if (!normalizedSearch) {
+      return stockFiltered;
     }
-    if (stockFilter === 'out') {
-      return product.current_quantity === 0;
+
+    return stockFiltered.filter((product) => {
+      const haystack = `${product.brand || ''} ${product.name || ''} ${product.surface_type || ''}`.toLowerCase();
+      return haystack.includes(normalizedSearch);
+    });
+  }, [products, effectiveStockFilter, searchTerm]);
+
+  const sortedProducts = useMemo(() => {
+    const normalizedText = (value) => (value || '').toString().trim().toLowerCase();
+    const statusRank = (quantity) => {
+      if (quantity === 0) return 0; // Out of stock first
+      if (quantity < 20) return 1; // Low stock next
+      return 2; // Healthy last
+    };
+
+    // Sorting always runs after filters/search to keep user context predictable.
+    const sorted = [...filteredProducts].sort((left, right) => {
+      let comparison = 0;
+      if (sortConfig.key === 'brand') {
+        comparison = normalizedText(left.brand).localeCompare(normalizedText(right.brand));
+      } else if (sortConfig.key === 'quantity') {
+        comparison = (left.current_quantity || 0) - (right.current_quantity || 0);
+      } else if (sortConfig.key === 'status') {
+        comparison = statusRank(left.current_quantity) - statusRank(right.current_quantity);
+      } else if (sortConfig.key === 'updated_at') {
+        comparison = new Date(left.updated_at || 0).getTime() - new Date(right.updated_at || 0).getTime();
+      } else {
+        comparison = normalizedText(left.name).localeCompare(normalizedText(right.name));
+      }
+
+      // Tie-breaker keeps list stable and readable for users.
+      if (comparison === 0) {
+        comparison = normalizedText(left.name).localeCompare(normalizedText(right.name));
+      }
+      return sortConfig.direction === 'asc' ? comparison : -comparison;
+    });
+    return sorted;
+  }, [filteredProducts, sortConfig]);
+
+  const getStockBadge = (quantity) => {
+    if (quantity === 0) {
+      return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Out of stock</Badge>;
     }
-    return true;
-  });
+    if (quantity < 20) {
+      return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-100">Low stock</Badge>;
+    }
+    return <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Healthy</Badge>;
+  };
+
+  const productsByStatus = useMemo(() => ({
+    all: products.length,
+    low: products.filter((product) => product.current_quantity > 0 && product.current_quantity < 20).length,
+    out: products.filter((product) => product.current_quantity === 0).length,
+  }), [products]);
+
+  const selectedVisibleCount = useMemo(
+    () => sortedProducts.filter((product) => selectedProductIds.includes(product.id)).length,
+    [sortedProducts, selectedProductIds],
+  );
+
+  const toggleSelectAllVisible = () => {
+    const visibleIds = sortedProducts.map((product) => product.id);
+    const allVisibleSelected = visibleIds.every((id) => selectedProductIds.includes(id));
+    if (allVisibleSelected) {
+      setSelectedProductIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
+      return;
+    }
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      visibleIds.forEach((id) => next.add(id));
+      return Array.from(next);
+    });
+  };
+
+  const clearQuickFilters = () => {
+    setSearchTerm('');
+    setLocalStockFilter('all');
+    setSortConfig(DEFAULT_SORT_CONFIG);
+  };
+
+  const selectedSortOption = SORT_OPTIONS.find((option) => option.key === sortConfig.key) || SORT_OPTIONS[0];
+
+  const handleSortSelection = (newSortKey) => {
+    // UX rule: selecting the active sort field toggles direction;
+    // selecting a different field starts in ascending order.
+    setSortConfig((prev) => {
+      if (prev.key === newSortKey) {
+        return {
+          ...prev,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return {
+        key: newSortKey,
+        direction: 'asc',
+      };
+    });
+  };
+
+  // legacy stock filter behavior for dashboard deep-link
+  const isDashboardFilterApplied = stockFilter === 'low' || stockFilter === 'out';
+  const dashboardFilterLabel = stockFilter === 'low' ? 'low-stock' : 'out-of-stock';
 
   useEffect(() => {
     fetchProducts();
@@ -324,7 +456,7 @@ const ProductsList = () => {
                     </div>
                     <div className="text-right">
                       <p className="text-3xl font-display font-bold text-orange">
-                        {filteredProducts.length}
+                        {sortedProducts.length}
                       </p>
                       <p className="text-sm text-slate-light">Products</p>
                     </div>
@@ -335,11 +467,11 @@ const ProductsList = () => {
 
             {/* Header */}
             <div className="mb-6">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <h1 className="text-3xl font-display font-bold text-slate">
                   Products
                 </h1>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap justify-end">
                   {canDeleteProducts && (
                     <>
                       <Button
@@ -371,15 +503,86 @@ const ProductsList = () => {
                   )}
                 </div>
               </div>
-              {stockFilter === 'low' && (
-                <p className="text-sm text-yellow-600 mt-2">Showing low-stock products (1-19 boxes).</p>
-              )}
-              {stockFilter === 'out' && (
-                <p className="text-sm text-red-600 mt-2">Showing out-of-stock products (0 boxes).</p>
-              )}
+              <div className="mt-4 rounded-lg border bg-white p-3">
+                <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
+                  <div className="relative w-full lg:max-w-sm">
+                    <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <Input
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Search brand, product or surface type"
+                      className="pl-9"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      type="button"
+                      variant={effectiveStockFilter === 'all' ? 'default' : 'outline'}
+                      className={effectiveStockFilter === 'all' ? 'bg-slate-700 hover:bg-slate-800' : ''}
+                      onClick={() => setLocalStockFilter('all')}
+                      disabled={isDashboardFilterApplied}
+                    >
+                      All ({productsByStatus.all})
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={effectiveStockFilter === 'low' ? 'default' : 'outline'}
+                      className={effectiveStockFilter === 'low' ? 'bg-yellow-600 hover:bg-yellow-700 text-white' : ''}
+                      onClick={() => setLocalStockFilter('low')}
+                      disabled={isDashboardFilterApplied}
+                    >
+                      Low ({productsByStatus.low})
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={effectiveStockFilter === 'out' ? 'default' : 'outline'}
+                      className={effectiveStockFilter === 'out' ? 'bg-red-600 hover:bg-red-700 text-white' : ''}
+                      onClick={() => setLocalStockFilter('out')}
+                      disabled={isDashboardFilterApplied}
+                    >
+                      Out ({productsByStatus.out})
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={clearQuickFilters}>
+                      Clear
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" variant="outline" className="min-w-[170px] justify-start">
+                          Sort: {selectedSortOption.label} {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        {SORT_OPTIONS.map((option) => {
+                          const isSelected = option.key === sortConfig.key;
+                          return (
+                            <DropdownMenuItem
+                              key={option.key}
+                              onSelect={() => handleSortSelection(option.key)}
+                              className="flex items-center justify-between"
+                            >
+                              <span>{option.label}</span>
+                              {/* Show arrow only for selected sort field to reduce menu noise. */}
+                              {isSelected ? (
+                                <span className="text-xs text-slate-light">
+                                  {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                                </span>
+                              ) : null}
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+                {isDashboardFilterApplied ? (
+                  <p className="text-xs text-slate-light mt-2">
+                    Dashboard filter is active ({dashboardFilterLabel}). Go back from dashboard to unlock quick stock filters.
+                  </p>
+                ) : null}
+              </div>
             </div>
 
-            {filteredProducts.length === 0 ? (
+            {sortedProducts.length === 0 ? (
               /* Empty State */
               <Card className="border-2 border-dashed border-gray-300">
                 <CardContent className="p-12 text-center">
@@ -387,11 +590,13 @@ const ProductsList = () => {
                     <Package className="h-8 w-8 text-gray-400" />
                   </div>
                   <h3 className="text-lg font-semibold text-slate mb-2">
-                    {stockFilter ? 'No products match this stock filter' : 'No products yet'}
+                    {effectiveStockFilter !== 'all' || searchTerm.trim()
+                      ? 'No products match current filters'
+                      : 'No products yet'}
                   </h3>
                   <p className="text-slate-light mb-4">
-                    {stockFilter
-                      ? 'Try another category or clear the filter from dashboard.'
+                    {effectiveStockFilter !== 'all' || searchTerm.trim()
+                      ? 'Try adjusting stock filter or search keyword.'
                       : 'Start by adding your first product to this category'}
                   </p>
                   {canWriteInventory && (
@@ -408,11 +613,31 @@ const ProductsList = () => {
             ) : (
               /* Products Grid */
               <>
+                {selectionMode && canDeleteProducts ? (
+                  <div className="mb-4 sticky top-2 z-10 rounded-lg border border-orange-200 bg-orange-50/80 backdrop-blur px-4 py-3 flex items-center justify-between gap-3">
+                    <p className="text-sm text-slate">
+                      {selectedVisibleCount} selected in current view
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant="outline" onClick={toggleSelectAllVisible}>
+                      {selectedVisibleCount === sortedProducts.length && sortedProducts.length > 0 ? 'Clear All' : 'Select All'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={openBulkDeleteDialog}
+                        disabled={selectedProductIds.length === 0 || deletingProducts}
+                      >
+                        Delete Selected ({selectedProductIds.length})
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredProducts.map((product) => (
+                  {sortedProducts.map((product) => (
                     <Card
                       key={product.id}
-                      className="cursor-pointer hover:shadow-lg hover:border-orange/40 transition-all"
+                      className="cursor-pointer hover:shadow-md hover:border-orange/40 transition-all"
                       onClick={() => openProductDetail(product.id)}
                       role="button"
                       tabIndex={0}
@@ -423,9 +648,9 @@ const ProductsList = () => {
                         }
                       }}
                     >
-                      <CardContent className="p-6">
+                      <CardContent className="p-4">
                         {/* Product Image */}
-                        <div className="w-full h-48 bg-gray-100 rounded-lg mb-4 flex items-center justify-center overflow-hidden">
+                        <div className="w-full h-40 bg-gray-100 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
                           {product.primary_image_url ? (
                             <img 
                               src={product.primary_image_url} 
@@ -438,22 +663,19 @@ const ProductsList = () => {
                         </div>
 
                         {/* Product Info */}
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <p className="text-xs text-orange font-semibold uppercase tracking-wide">
                                 {product.brand}
                               </p>
-                              <h3 className="text-lg font-semibold text-slate mt-1">
+                              <h3 className="text-base font-semibold text-slate mt-1 leading-tight">
                                 {product.name}
                               </h3>
+                              <p className="text-xs text-slate-light mt-1">{product.surface_type}</p>
                             </div>
+                            {getStockBadge(product.current_quantity)}
                           </div>
-
-                          {/* Surface Type Badge */}
-                          <Badge variant="outline" className="border-orange text-orange">
-                            {product.surface_type}
-                          </Badge>
 
                           {/* Quantity Transaction Controls */}
                           <div className="pt-3 border-t border-gray-100">
@@ -511,30 +733,46 @@ const ProductsList = () => {
                                 Select
                               </label>
                             )}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1 text-orange border-orange hover:bg-orange-50"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                viewTransactionHistory(product);
-                              }}
-                            >
-                              <History className="mr-2 h-4 w-4" />
-                              History
-                            </Button>
-                            {canDeleteProducts && !selectionMode && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="text-red-600 border-red-300 hover:bg-red-50"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openSingleDeleteDialog(product);
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                            {!selectionMode && (
+                              <>
+                                <p className="text-xs text-slate-light flex-1">Open card for full details</p>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-8 w-8 text-orange border-orange hover:bg-orange-50"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          viewTransactionHistory(product);
+                                        }}
+                                      >
+                                        <History className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>View history</TooltipContent>
+                                  </Tooltip>
+                                  {canDeleteProducts && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-8 w-8 text-red-600 border-red-300 hover:bg-red-50"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openSingleDeleteDialog(product);
+                                          }}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Delete product</TooltipContent>
+                                    </Tooltip>
+                                  )}
+                                </TooltipProvider>
+                              </>
                             )}
                           </div>
                         </div>
@@ -545,7 +783,7 @@ const ProductsList = () => {
 
                 {/* Results Count */}
                 <div className="mt-8 text-center text-sm text-slate-light">
-                  Showing {filteredProducts.length} products
+                  Showing {sortedProducts.length} products
                 </div>
               </>
             )}
