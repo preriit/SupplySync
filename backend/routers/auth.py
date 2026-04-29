@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from auth import create_access_token, get_current_user, get_password_hash, verify_password
 from database import get_db
@@ -23,12 +24,31 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == request.email).first()
+    # Phase 1: allow a single account to authenticate with either email or mobile
+    # while keeping one shared password hash for that account.
+    email = (request.email or "").strip()
+    phone = (request.phone or "").strip()
+    identifier = email or phone
+
+    # Normalize phone input so common formats map to the same stored value.
+    # Examples: 9876543210, +919876543210, 919876543210
+    normalized_phone = "".join(ch for ch in identifier if ch.isdigit())
+    phone_variants = {identifier, normalized_phone}
+    if normalized_phone.startswith("91") and len(normalized_phone) == 12:
+        phone_variants.add(normalized_phone[-10:])
+    if len(normalized_phone) == 10:
+        phone_variants.add(f"+91{normalized_phone}")
+
+    # Use email lookup when input is email-like; otherwise try phone variants.
+    if "@" in identifier:
+        user = db.query(User).filter(User.email == identifier).first()
+    else:
+        user = db.query(User).filter(or_(*[User.phone == value for value in phone_variants if value])).first()
 
     if not user or not verify_password(request.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect mobile/email or password",
         )
 
     if not user.is_active:

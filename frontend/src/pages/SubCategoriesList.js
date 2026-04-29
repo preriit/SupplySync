@@ -95,6 +95,20 @@ const SubCategoriesList = () => {
     }
   };
 
+  // Small visual status helps users prioritize categories before drilling in.
+  const getStockStatus = (subcategory) => {
+    if (subcategory.product_count === 0) {
+      return { label: 'No products', className: 'bg-slate-100 text-slate-600' };
+    }
+    if (subcategory.total_quantity === 0) {
+      return { label: 'Out of stock', className: 'bg-red-100 text-red-700' };
+    }
+    if (subcategory.total_quantity < 20) {
+      return { label: 'Low stock', className: 'bg-yellow-100 text-yellow-700' };
+    }
+    return { label: 'Healthy', className: 'bg-green-100 text-green-700' };
+  };
+
   return (
     <div className="min-h-screen bg-grey-50">
       <DealerNav />
@@ -154,19 +168,20 @@ const SubCategoriesList = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {subcategories.map((subcat) => (
               <Card
                 key={subcat.id}
-                className="hover:shadow-lg hover:border-orange/40 transition-all"
+                className="h-full hover:shadow-lg hover:border-orange/40 transition-all"
               >
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
+                <CardContent className="p-5 h-full flex flex-col">
+                  <div className="flex items-start justify-between gap-3">
                     <div
-                      className="flex-1 cursor-pointer"
+                      className="flex-1 cursor-pointer min-w-0"
                       onClick={() => handleViewProducts(subcat.id)}
                       role="button"
                       tabIndex={0}
+                      // Keep the entire info block interactive for fast navigation.
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
@@ -174,48 +189,25 @@ const SubCategoriesList = () => {
                         }
                       }}
                     >
-                      <div className="flex items-center space-x-3">
-                        <div className="w-12 h-12 bg-orange-light rounded-lg flex items-center justify-center">
+                      <div className="flex items-start space-x-3">
+                        <div className="w-11 h-11 bg-orange-light rounded-lg flex items-center justify-center shrink-0">
                           <Grid3x3 className="h-6 w-6 text-orange" />
                         </div>
-                        <div>
-                          <h3 className="text-xl font-display font-bold text-slate">
+                        <div className="min-w-0">
+                          <h3 className="text-lg font-display font-bold text-slate truncate">
                             {subcat.name}
                           </h3>
-                          <p className="text-sm text-slate-light">
+                          <p className="text-sm text-slate-light truncate">
                             {subcat.size_mm} • {subcat.make_type}
                           </p>
-                          <p className="text-xs text-orange mt-1">Click to open products</p>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-2 ${getStockStatus(subcat).className}`}>
+                            {getStockStatus(subcat).label}
+                          </span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-3">
-                      {subcat.product_count > 0 ? (
-                        <Button
-                          variant="outline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleViewProducts(subcat.id);
-                          }}
-                          className="border-2 border-orange text-orange hover:bg-orange-50"
-                        >
-                          <span>{t('inventory:view_products')}</span>
-                          <ArrowRight className="ml-2 h-4 w-4" />
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleViewProducts(subcat.id);
-                          }}
-                          className="border-2 border-orange text-orange hover:bg-orange-50"
-                        >
-                          {canWriteInventory && <Plus className="mr-2 h-4 w-4" />}
-                          <span>{canWriteInventory ? t('inventory:add_products') : t('inventory:view_products')}</span>
-                        </Button>
-                      )}
+                    <div className="flex items-center gap-2 shrink-0">
                       {canWriteInventory && (
                         <Button
                           variant="ghost"
@@ -233,8 +225,8 @@ const SubCategoriesList = () => {
                     </div>
                   </div>
 
-                  {subcat.product_count > 0 ? (
-                    <div className="mt-4 pt-4 border-t border-gray-100 flex items-center space-x-6 text-sm">
+                  <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-sm">
+                    <div className="flex items-center space-x-4">
                       <div className="flex items-center space-x-2 text-slate-light">
                         <Box className="h-4 w-4" />
                         <span>{t('inventory:products_count', { count: subcat.product_count })}</span>
@@ -244,12 +236,27 @@ const SubCategoriesList = () => {
                         <span>{t('inventory:boxes_in_stock', { count: subcat.total_quantity })}</span>
                       </div>
                     </div>
-                  ) : (
-                    <div className="mt-4 pt-4 border-t border-gray-100">
-                      <div className="flex items-center space-x-2 text-sm text-slate-light italic">
-                        <AlertCircle className="h-4 w-4" />
-                        <span>{t('inventory:no_products_yet')}</span>
-                      </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewProducts(subcat.id);
+                      }}
+                      className="border-2 border-orange text-orange hover:bg-orange-50"
+                    >
+                      {subcat.product_count === 0 && canWriteInventory ? (
+                        <Plus className="mr-2 h-4 w-4" />
+                      ) : null}
+                      <span>{subcat.product_count > 0 ? t('inventory:view_products') : (canWriteInventory ? t('inventory:add_products') : t('inventory:view_products'))}</span>
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {subcat.product_count === 0 && (
+                    <div className="mt-3 flex items-center space-x-2 text-sm text-slate-light italic">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>{t('inventory:no_products_yet')}</span>
                     </div>
                   )}
                 </CardContent>

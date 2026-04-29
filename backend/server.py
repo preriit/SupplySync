@@ -1,7 +1,7 @@
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, model_validator
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 import os
@@ -9,6 +9,7 @@ import logging
 import hashlib
 import smtplib
 import uuid
+import random
 from threading import Lock
 from pathlib import Path
 from email.message import EmailMessage
@@ -21,7 +22,7 @@ from models import (
     SurfaceType, ApplicationType, BodyType, Quality, Category, Size, ProductTransaction, ProductActivityLog, ProductImage
 )
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from typing import List
 
@@ -46,8 +47,12 @@ FORGOT_PASSWORD_WINDOW_SECONDS = int(os.environ.get("FORGOT_PASSWORD_WINDOW_SECO
 FORGOT_PASSWORD_MAX_ATTEMPTS = int(os.environ.get("FORGOT_PASSWORD_MAX_ATTEMPTS", "5"))
 RESET_PASSWORD_WINDOW_SECONDS = int(os.environ.get("RESET_PASSWORD_WINDOW_SECONDS", "900"))
 RESET_PASSWORD_MAX_ATTEMPTS = int(os.environ.get("RESET_PASSWORD_MAX_ATTEMPTS", "10"))
+LOGIN_OTP_EXPIRE_SECONDS = int(os.environ.get("LOGIN_OTP_EXPIRE_SECONDS", "300"))
+LOGIN_OTP_MAX_VERIFY_ATTEMPTS = int(os.environ.get("LOGIN_OTP_MAX_VERIFY_ATTEMPTS", "5"))
 _RATE_LIMIT_BUCKETS = {}
 _RATE_LIMIT_LOCK = Lock()
+_LOGIN_OTP_STORE = {}
+_LOGIN_OTP_LOCK = Lock()
 
 # Create the main app
 app = FastAPI(
@@ -62,13 +67,30 @@ api_router = APIRouter(prefix="/api")
 
 # Pydantic Models
 class LoginRequest(BaseModel):
-    email: EmailStr
+    # Phase 1: allow login with either email or mobile number.
+    email: Optional[str] = None
+    phone: Optional[str] = None
     password: str
+
+    @model_validator(mode="after")
+    def validate_identifier(self):
+        if not (self.email and self.email.strip()) and not (self.phone and self.phone.strip()):
+            raise ValueError("Either email or phone is required")
+        return self
 
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str
     user: dict
+
+
+class RequestLoginOtpRequest(BaseModel):
+    phone: str
+
+
+class VerifyLoginOtpRequest(BaseModel):
+    phone: str
+    otp: str
 
 class RegisterDealerRequest(BaseModel):
     username: str
@@ -348,16 +370,87 @@ def _coverage_per_pc_from_mm(width_mm: int, height_mm: int) -> tuple[float, floa
 def _normalized_size_token(size_value: str) -> str:
     return (size_value or "").replace('"', "").replace(" ", "").lower()
 
+
+def _build_login_response(user: User) -> dict:
+    access_token = create_access_token(data={"sub": str(user.id)})
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": str(user.id),
+            "username": user.username,
+            "email": user.email,
+            "user_type": user.user_type,
+            "merchant_id": str(user.merchant_id) if user.merchant_id else None,
+            "preferred_language": user.preferred_language or "en",
+        },
+    }
+
+
+def _resolve_user_by_identifier(db: Session, email: str, phone: str):
+    identifier = email or phone
+    normalized_phone = "".join(ch for ch in identifier if ch.isdigit())
+    phone_variants = {identifier, normalized_phone}
+    if normalized_phone.startswith("91") and len(normalized_phone) == 12:
+        phone_variants.add(normalized_phone[-10:])
+    if len(normalized_phone) == 10:
+        phone_variants.add(f"+91{normalized_phone}")
+
+    if "@" in identifier:
+        return db.query(User).filter(User.email == identifier).first()
+    return db.query(User).filter(or_(*[User.phone == value for value in phone_variants if value])).first()
+
+
+def _normalize_phone(phone: str) -> str:
+    return "".join(ch for ch in (phone or "") if ch.isdigit())
+
+
+def _generate_login_otp() -> str:
+    return f"{random.randint(100000, 999999)}"
+
+
+def _store_login_otp(normalized_phone: str, otp: str) -> None:
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=LOGIN_OTP_EXPIRE_SECONDS)
+    with _LOGIN_OTP_LOCK:
+        _LOGIN_OTP_STORE[normalized_phone] = {
+            "otp": otp,
+            "expires_at": expires_at,
+            "attempts": 0,
+        }
+
+
+def _validate_login_otp(normalized_phone: str, otp: str) -> bool:
+    now = datetime.now(timezone.utc)
+    with _LOGIN_OTP_LOCK:
+        record = _LOGIN_OTP_STORE.get(normalized_phone)
+        if not record:
+            return False
+        if now > record["expires_at"]:
+            _LOGIN_OTP_STORE.pop(normalized_phone, None)
+            return False
+        if record["attempts"] >= LOGIN_OTP_MAX_VERIFY_ATTEMPTS:
+            _LOGIN_OTP_STORE.pop(normalized_phone, None)
+            return False
+        if record["otp"] != otp:
+            record["attempts"] += 1
+            return False
+
+        _LOGIN_OTP_STORE.pop(normalized_phone, None)
+        return True
+
 # Auth Routes
 @api_router.post("/auth/login", response_model=LoginResponse)
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
-    """Login endpoint for dealers and subdealers"""
-    user = db.query(User).filter(User.email == request.email).first()
+    """Login endpoint for dealers and subdealers."""
+    # Phase 1: same account can be accessed using email or mobile + shared password.
+    email = (request.email or "").strip()
+    phone = (request.phone or "").strip()
+    user = _resolve_user_by_identifier(db=db, email=email, phone=phone)
     
     if not user or not verify_password(request.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
+            detail="Incorrect mobile/email or password"
         )
     
     if not user.is_active:
@@ -375,22 +468,66 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     # Update last login
     user.last_login = datetime.now(timezone.utc)
     db.commit()
-    
-    # Create access token
-    access_token = create_access_token(data={"sub": str(user.id)})
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": {
-            "id": str(user.id),
-            "username": user.username,
-            "email": user.email,
-            "user_type": user.user_type,
-            "merchant_id": str(user.merchant_id) if user.merchant_id else None,
-            "preferred_language": user.preferred_language or "en"
-        }
-    }
+    return _build_login_response(user)
+
+
+@api_router.post("/auth/login/request-otp")
+async def request_login_otp(request: RequestLoginOtpRequest, db: Session = Depends(get_db)):
+    """
+    Phase 2: request OTP for mobile-based login.
+    Returns dev-only OTP in non-production for local testing.
+    """
+    normalized_phone = _normalize_phone(request.phone)
+    if len(normalized_phone) != 10:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please enter a valid 10-digit mobile number",
+        )
+
+    user = _resolve_user_by_identifier(db=db, email="", phone=normalized_phone)
+    generic_response = {"message": "If the mobile is registered, OTP has been sent."}
+    if not user or not user.is_active:
+        return generic_response
+
+    otp = _generate_login_otp()
+    _store_login_otp(normalized_phone=normalized_phone, otp=otp)
+    logging.info("Generated login OTP for %s", normalized_phone)
+
+    if APP_ENV != "production":
+        return {**generic_response, "dev_only_otp": otp}
+    return generic_response
+
+
+@api_router.post("/auth/login/verify-otp", response_model=LoginResponse)
+async def verify_login_otp(request: VerifyLoginOtpRequest, db: Session = Depends(get_db)):
+    normalized_phone = _normalize_phone(request.phone)
+    if len(normalized_phone) != 10:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please enter a valid 10-digit mobile number",
+        )
+
+    if not _validate_login_otp(normalized_phone=normalized_phone, otp=(request.otp or "").strip()):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired OTP",
+        )
+
+    user = _resolve_user_by_identifier(db=db, email="", phone=normalized_phone)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired OTP",
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is inactive",
+        )
+
+    user.last_login = datetime.now(timezone.utc)
+    db.commit()
+    return _build_login_response(user)
 
 
 @api_router.post("/auth/forgot-password")
@@ -935,9 +1072,10 @@ async def get_dashboard_stats(
     
     merchant_id = current_user.merchant_id
     
-    # Total products
+    # Total products shown on dashboard should reflect currently active inventory only.
     total_products = db.query(func.count(Product.id)).filter(
-        Product.merchant_id == merchant_id
+        Product.merchant_id == merchant_id,
+        Product.is_active == True
     ).scalar()
     
     # Active products
