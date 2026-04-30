@@ -64,6 +64,14 @@ const withTailwindPostCss = (webpackConfig) => {
 };
 
 const webpackConfig = {
+  jest: {
+    configure: {
+      moduleNameMapper: {
+        '^@/(.*)$': '<rootDir>/src/$1',
+      },
+      moduleDirectories: ['node_modules', '<rootDir>/../node_modules'],
+    },
+  },
   eslint: {
     configure: {
       extends: ["plugin:react-hooks/recommended"],
