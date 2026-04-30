@@ -3,5 +3,8 @@
   "private": true,
   "version": "0.0.1",
   "main": "src/index.js",
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "validate": "node -e \"import('./src/index.js').then(() => { console.log('ui exports load successfully'); })\""
+  }
 }

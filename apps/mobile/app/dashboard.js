@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
-import { createSessionManager } from '@supplysync/core';
+import { createAuthHelpers, createSessionManager } from '@supplysync/core';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { secureStorage } from '../lib/storage';
@@ -12,7 +12,16 @@ export default function DashboardScreen() {
   useEffect(() => {
     let mounted = true;
     const loadUser = async () => {
-      const user = await dealerSessionManager.getUser('dealer');
+      const authHelpers = createAuthHelpers(dealerSessionManager);
+      const isLoggedIn = await authHelpers.isAuthenticated('dealer');
+      if (!mounted) {
+        return;
+      }
+      if (!isLoggedIn) {
+        router.replace('/login');
+        return;
+      }
+      const user = await authHelpers.getCurrentUser('dealer');
       if (!mounted || !user) {
         return;
       }
@@ -38,6 +47,10 @@ export default function DashboardScreen() {
         <Text style={styles.subtitle}>
           Mobile routing and shared API client are now wired.
         </Text>
+
+        <Pressable style={styles.secondaryButton} onPress={() => router.push('/inventory')}>
+          <Text style={styles.secondaryButtonText}>Open Inventory</Text>
+        </Pressable>
 
         <Pressable style={styles.button} onPress={handleLogout}>
           <Text style={styles.buttonText}>Logout</Text>
@@ -76,6 +89,17 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   buttonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    backgroundColor: '#F97316',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  secondaryButtonText: {
     color: '#FFFFFF',
     fontWeight: '600',
   },

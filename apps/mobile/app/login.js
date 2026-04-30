@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
-import { createSessionManager } from '@supplysync/core';
+import { buildLoginPayload, createSessionManager } from '@supplysync/core';
 import {
   ActivityIndicator,
   Pressable,
@@ -35,14 +35,8 @@ export default function LoginScreen() {
     setError('');
     setLoading(true);
     try {
-      const trimmedIdentifier = identifier.trim();
-      const isPhoneIdentifier = !trimmedIdentifier.includes('@');
-
-      const response = await api.post('/auth/login', {
-        email: isPhoneIdentifier ? undefined : trimmedIdentifier,
-        phone: isPhoneIdentifier ? trimmedIdentifier : undefined,
-        password,
-      });
+      const payload = buildLoginPayload(identifier, password);
+      const response = await api.post('/auth/login', payload);
 
       const { access_token, user } = response.data;
       await dealerSessionManager.setSession({

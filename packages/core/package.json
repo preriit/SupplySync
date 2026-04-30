@@ -4,7 +4,11 @@
   "version": "0.0.1",
   "main": "src/index.js",
   "type": "module",
+  "scripts": {
+    "validate": "node -e \"import('./src/index.js').then(() => { console.log('core exports load successfully'); })\""
+  },
   "dependencies": {
-    "axios": "^1.8.4"
+    "axios": "^1.8.4",
+    "zod": "^3.24.4"
   }
 }

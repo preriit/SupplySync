@@ -11,6 +11,11 @@
   "scripts": {
     "web:start": "npm run start --workspace frontend",
     "web:build": "npm run build --workspace frontend",
-    "mobile:start": "npm run start --workspace apps/mobile"
+    "mobile:start": "npm run start --workspace apps/mobile",
+    "web:test": "npm run test:ci --workspace frontend",
+    "mobile:web:build": "npm run build:web --workspace apps/mobile",
+    "core:validate": "npm run validate --workspace @supplysync/core",
+    "ui:validate": "npm run validate --workspace @supplysync/ui",
+    "validate": "npm run core:validate && npm run ui:validate && npm run web:build && npm run web:test && npm run mobile:web:build"
   }
 }

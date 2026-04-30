@@ -1,0 +1,38 @@
+name: PR Quality Gates
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate shared packages
+        run: |
+          npm run core:validate
+          npm run ui:validate
+
+      - name: Validate web app
+        run: |
+          npm run web:build
+          npm run web:test
+
+      - name: Validate mobile web bundle
+        run: npm run mobile:web:build

@@ -69,7 +69,8 @@
     "start": "craco start",
     "web:build": "craco build",
     "build": "craco build",
-    "test": "craco test"
+    "test": "craco test",
+    "test:ci": "craco test --watchAll=false --passWithNoTests"
   },
   "devDependencies": {
     "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
