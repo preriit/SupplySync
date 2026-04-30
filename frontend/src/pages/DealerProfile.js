@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { webStorage } from '@supplysync/core';
 import DealerPageShell from '../components/DealerPageShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -41,10 +42,11 @@ const DealerProfile = () => {
     try {
       const response = await api.get('/auth/me');
       const user = response.data || {};
+      const localUser = JSON.parse(webStorage.getItem('user') || '{}');
       setFormData({
         username: user.username || '',
         email: user.email || '',
-        phone: user.phone || JSON.parse(localStorage.getItem('user') || '{}').phone || '',
+        phone: user.phone || localUser.phone || '',
         preferred_language: user.preferred_language || 'en',
         user_type: user.user_type || '',
         merchant_id: user.merchant_id || '',
@@ -52,7 +54,7 @@ const DealerProfile = () => {
       setOriginalData({
         username: user.username || '',
         email: user.email || '',
-        phone: user.phone || JSON.parse(localStorage.getItem('user') || '{}').phone || '',
+        phone: user.phone || localUser.phone || '',
         preferred_language: user.preferred_language || 'en',
         user_type: user.user_type || '',
         merchant_id: user.merchant_id || '',
@@ -80,14 +82,14 @@ const DealerProfile = () => {
       const response = await api.put('/auth/me', payload);
       const updated = response.data || {};
 
-      const existingLocal = JSON.parse(localStorage.getItem('user') || '{}');
+      const existingLocal = JSON.parse(webStorage.getItem('user') || '{}');
       const mergedLocal = {
         ...existingLocal,
         username: updated.username || existingLocal.username,
         preferred_language: updated.preferred_language || existingLocal.preferred_language,
       };
       if (formData.phone) mergedLocal.phone = formData.phone;
-      localStorage.setItem('user', JSON.stringify(mergedLocal));
+      webStorage.setItem('user', JSON.stringify(mergedLocal));
 
       setFormData((prev) => ({
         ...prev,

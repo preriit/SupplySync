@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { webStorage } from '@supplysync/core';
 import DealerPageShell from '../components/DealerPageShell';
 import StatCard from '../components/StatCard';
 import { Button } from '@/components/ui/button';
@@ -21,7 +22,7 @@ import AppBreadcrumb from '@/components/theme/AppBreadcrumb';
 const DealerDashboard = () => {
   const { t } = useTranslation(['dashboard', 'common']);
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = JSON.parse(webStorage.getItem('user') || '{}');
   const canWriteInventory = ['dealer', 'manager'].includes(user.user_type);
   const [stats, setStats] = useState({
     total_products: 0,

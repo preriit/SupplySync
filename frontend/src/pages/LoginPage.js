@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
+import { createSessionManager, webStorage } from '@supplysync/core';
 import api from '../utils/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +52,7 @@ const LoginPage = () => {
   const [infoMessage, setInfoMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const dealerSessionManager = createSessionManager(webStorage);
 
   useEffect(() => {
     if (otpCooldown <= 0) {
@@ -62,12 +64,14 @@ const LoginPage = () => {
     return () => window.clearInterval(timer);
   }, [otpCooldown]);
 
-  const completeLogin = (response) => {
+  const completeLogin = async (response) => {
     const { access_token, user } = response.data;
 
-    // Save token and user info
-    localStorage.setItem('token', access_token);
-    localStorage.setItem('user', JSON.stringify(user));
+    await dealerSessionManager.setSession({
+      token: access_token,
+      user,
+      scope: 'dealer',
+    });
 
     // Redirect based on user type
     if (['dealer', 'manager', 'staff'].includes(user.user_type)) {
@@ -92,7 +96,7 @@ const LoginPage = () => {
         phone: isPhoneIdentifier ? trimmedIdentifier : undefined,
         password,
       });
-      completeLogin(response);
+      await completeLogin(response);
     } catch (err) {
       setError(resolveLoginErrorMessage(err, t('auth:errors.invalid_credentials')));
     } finally {
@@ -131,7 +135,7 @@ const LoginPage = () => {
         phone: identifier.trim(),
         otp: otp.trim(),
       });
-      completeLogin(response);
+      await completeLogin(response);
     } catch (err) {
       setError(resolveLoginErrorMessage(err, 'Invalid or expired OTP.'));
     } finally {

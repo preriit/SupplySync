@@ -56,7 +56,7 @@
     "react-i18next": "^13.5.0",
     "react-resizable-panels": "^3.0.1",
     "react-router-dom": "^7.5.1",
-    "react-scripts": "5.0.1",
+    "react-scripts": "^5.0.1",
     "recharts": "^3.6.0",
     "sonner": "^2.0.3",
     "tailwind-merge": "^3.2.0",
@@ -65,7 +65,9 @@
     "zod": "^3.24.4"
   },
   "scripts": {
+    "web:start": "craco start",
     "start": "craco start",
+    "web:build": "craco build",
     "build": "craco build",
     "test": "craco test"
   },

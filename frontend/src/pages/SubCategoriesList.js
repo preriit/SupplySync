@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { webStorage } from '@supplysync/core';
 import DealerPageShell from '../components/DealerPageShell';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -32,7 +33,7 @@ const SubCategoriesList = () => {
   const [deletingSubcategoryId, setDeletingSubcategoryId] = useState(null);
   const [subcategoryToDelete, setSubcategoryToDelete] = useState(null);
   const [showAddCategoryDialog, setShowAddCategoryDialog] = useState(false);
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = JSON.parse(webStorage.getItem('user') || '{}');
   const canWriteInventory = ['dealer', 'manager'].includes(user.user_type);
 
   useEffect(() => {

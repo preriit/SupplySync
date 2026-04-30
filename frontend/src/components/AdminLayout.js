@@ -1,15 +1,22 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { createSessionManager, webStorage } from '@supplysync/core';
 import { LayoutDashboard, Users, Building2, Database, BarChart3, LogOut, Shield } from 'lucide-react';
 
 const AdminLayout = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const adminUser = JSON.parse(localStorage.getItem('admin_user') || '{}');
+  const adminSessionManager = createSessionManager(webStorage);
+  const adminUser = (() => {
+    try {
+      return JSON.parse(webStorage.getItem('admin_user') || '{}');
+    } catch (_error) {
+      return {};
+    }
+  })();
 
-  const handleLogout = () => {
-    localStorage.removeItem('admin_token');
-    localStorage.removeItem('admin_user');
+  const handleLogout = async () => {
+    await adminSessionManager.clearSession('admin');
     navigate('/admin/login');
   };
 

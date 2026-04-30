@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { webStorage } from '@supplysync/core';
 import AdminLayout from '../components/AdminLayout';
 import { Database, Plus, Trash2, Package, Pencil } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -93,7 +94,7 @@ const AdminReferenceData = () => {
     summaryRequestId.current += 1;
     const myId = summaryRequestId.current;
     try {
-      const token = localStorage.getItem('admin_token');
+      const token = webStorage.getItem('admin_token');
       const response = await api.get('/admin/reference-data-summary', {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -111,7 +112,7 @@ const AdminReferenceData = () => {
 
   const fetchBodyTypes = async () => {
     try {
-      const token = localStorage.getItem('admin_token');
+      const token = webStorage.getItem('admin_token');
       const response = await api.get('/admin/reference-data/body_types', {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -123,7 +124,7 @@ const AdminReferenceData = () => {
 
   const fetchApplicationTypes = async () => {
     try {
-      const token = localStorage.getItem('admin_token');
+      const token = webStorage.getItem('admin_token');
       const response = await api.get('/admin/reference-data/application_types', {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -135,7 +136,7 @@ const AdminReferenceData = () => {
 
   const fetchItems = async (dataType) => {
     try {
-      const token = localStorage.getItem('admin_token');
+      const token = webStorage.getItem('admin_token');
       const endpoint = dataType === 'sizes' 
         ? '/admin/reference-data/sizes/detailed'
         : `/admin/reference-data/${dataType}`;
@@ -170,7 +171,7 @@ const AdminReferenceData = () => {
     }
 
     try {
-      const token = localStorage.getItem('admin_token');
+      const token = webStorage.getItem('admin_token');
       const payload = { name: newItemName, display_order: 0 };
       
       if (selectedType === 'make_types') {
@@ -238,7 +239,7 @@ const AdminReferenceData = () => {
     }
 
     try {
-      const token = localStorage.getItem('admin_token');
+      const token = webStorage.getItem('admin_token');
       await api.post('/admin/reference-data/sizes/create', {
         width_inches: Math.floor(widthInches),
         width_mm: Math.floor(widthMm),
@@ -269,7 +270,7 @@ const AdminReferenceData = () => {
     if (!confirm('Are you sure you want to deactivate this item?')) return;
 
     try {
-      const token = localStorage.getItem('admin_token');
+      const token = webStorage.getItem('admin_token');
       await api.delete(`/admin/reference-data/${selectedType}/${itemId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -317,7 +318,7 @@ const AdminReferenceData = () => {
     if (!editingItem) return;
 
     try {
-      const token = localStorage.getItem('admin_token');
+      const token = webStorage.getItem('admin_token');
       const payload = {
         display_order: Number(editForm.displayOrder || 0),
       };

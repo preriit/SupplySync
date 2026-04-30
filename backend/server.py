@@ -3628,10 +3628,13 @@ def log_product_activity(
 
 
 # CORS middleware
+_cors_origins = [origin.strip() for origin in os.environ.get('CORS_ORIGINS', '*').split(',') if origin.strip()]
+_allow_all_origins = '*' in _cors_origins
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    # Browsers reject `Access-Control-Allow-Origin: *` when credentials are enabled.
+    allow_credentials=not _allow_all_origins,
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

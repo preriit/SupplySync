@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { webStorage } from '@supplysync/core';
 import AdminLayout from '../components/AdminLayout';
 import { Users, Building2, Package, TrendingUp, Clock, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,7 +25,7 @@ const AdminDashboard = () => {
 
   const fetchStats = async () => {
     try {
-      const token = localStorage.getItem('admin_token');
+      const token = webStorage.getItem('admin_token');
       const response = await api.get('/admin/dashboard/stats', {
         headers: { Authorization: `Bearer ${token}` }
       });

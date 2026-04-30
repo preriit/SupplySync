@@ -1,0 +1,16 @@
+{
+  "name": "supplysync-workspace",
+  "private": true,
+  "version": "0.0.1",
+  "workspaces": [
+    "frontend",
+    "apps/mobile",
+    "packages/core",
+    "packages/ui"
+  ],
+  "scripts": {
+    "web:start": "npm run start --workspace frontend",
+    "web:build": "npm run build --workspace frontend",
+    "mobile:start": "npm run start --workspace apps/mobile"
+  }
+}

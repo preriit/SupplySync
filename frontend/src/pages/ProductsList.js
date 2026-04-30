@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { webStorage } from '@supplysync/core';
 import DealerPageShell from '../components/DealerPageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -69,7 +70,7 @@ const ProductsList = () => {
   const { subcategoryId } = useParams();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = JSON.parse(webStorage.getItem('user') || '{}');
   const canWriteInventory = ['dealer', 'manager'].includes(user.user_type);
   const canDeleteProducts = user.user_type === 'dealer';
   const [subcategory, setSubcategory] = useState(null);

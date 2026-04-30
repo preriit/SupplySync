@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { createSessionManager, webStorage } from '@supplysync/core';
 import { Shield, Lock, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +11,7 @@ import api from '../utils/api';
 
 const AdminLogin = () => {
   const navigate = useNavigate();
+  const adminSessionManager = createSessionManager(webStorage);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -30,9 +32,11 @@ const AdminLogin = () => {
 
       const { access_token, admin } = response.data;
 
-      // Save token and admin info
-      localStorage.setItem('admin_token', access_token);
-      localStorage.setItem('admin_user', JSON.stringify(admin));
+      await adminSessionManager.setSession({
+        token: access_token,
+        user: admin,
+        scope: 'admin',
+      });
 
       navigate('/admin/dashboard');
     } catch (err) {

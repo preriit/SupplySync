@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { webStorage } from '@supplysync/core';
 import DealerPageShell from '../components/DealerPageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -50,7 +51,7 @@ const ProductDetail = () => {
   const navigate = useNavigate();
   const { subcategoryId, productId } = useParams();
   const { toast } = useToast();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = JSON.parse(webStorage.getItem('user') || '{}');
   const canWriteInventory = ['dealer', 'manager'].includes(user.user_type);
   const canDeleteInventory = user.user_type === 'dealer';
   

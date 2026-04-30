@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { createSessionManager, webStorage } from '@supplysync/core';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -16,10 +17,11 @@ import { LogOut, User, LayoutDashboard, Package, Users, BarChart3, Search, Grid3
 import api from '../utils/api';
 
 const DealerNav = () => {
+  const dealerSessionManager = createSessionManager(webStorage);
   const { t } = useTranslation(['dashboard', 'common']);
   const navigate = useNavigate();
   const location = useLocation();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = JSON.parse(webStorage.getItem('user') || '{}');
   const canManageTeam = user.user_type === 'dealer';
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
@@ -67,9 +69,8 @@ const DealerNav = () => {
     setSearchQuery('');
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+  const handleLogout = async () => {
+    await dealerSessionManager.clearSession('dealer');
     navigate('/login');
   };
 

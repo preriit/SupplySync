@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { webStorage } from '@supplysync/core';
 import AdminLayout from '../components/AdminLayout';
 import { Search, Building2, MapPin, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +28,7 @@ const AdminMerchants = () => {
 
   const fetchMerchants = async () => {
     try {
-      const token = localStorage.getItem('admin_token');
+      const token = webStorage.getItem('admin_token');
       const response = await api.get('/admin/merchants', {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -45,7 +46,7 @@ const AdminMerchants = () => {
 
   const updateMerchantStatus = async (merchantId, isActive, subscriptionStatus) => {
     try {
-      const token = localStorage.getItem('admin_token');
+      const token = webStorage.getItem('admin_token');
       await api.put(
         `/admin/merchants/${merchantId}/status`,
         { 

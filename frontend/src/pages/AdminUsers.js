@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { webStorage } from '@supplysync/core';
 import AdminLayout from '../components/AdminLayout';
 import { Search, Filter, CheckCircle, XCircle, Ban } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,7 +21,7 @@ const AdminUsers = () => {
 
   const fetchUsers = async () => {
     try {
-      const token = localStorage.getItem('admin_token');
+      const token = webStorage.getItem('admin_token');
       const response = await api.get('/admin/users', {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -38,7 +39,7 @@ const AdminUsers = () => {
 
   const toggleUserStatus = async (userId, currentStatus) => {
     try {
-      const token = localStorage.getItem('admin_token');
+      const token = webStorage.getItem('admin_token');
       await api.put(
         `/admin/users/${userId}/status`,
         { is_active: !currentStatus },
