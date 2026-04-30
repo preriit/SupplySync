@@ -5,6 +5,7 @@
   "main": "src/index.js",
   "type": "module",
   "scripts": {
+    "test": "node --test",
     "validate": "node -e \"import('./src/index.js').then(() => { console.log('core exports load successfully'); })\""
   },
   "dependencies": {
