@@ -83,6 +83,13 @@ frontend/node_modules/.cache/default-development/0.pack
 # Environment files
 *.env
 *.env.*
+
+# Runtime/editor noise
+**/__pycache__/
+**/*.py[cod]
+**/node_modules/.cache/
+apps/mobile/.expo/
+*.backup
 -e 
 # Environment files
 *.env
