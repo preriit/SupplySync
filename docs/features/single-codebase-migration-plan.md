@@ -46,7 +46,7 @@
 - [x] Stabilization tests added for shared core and web smoke paths.
 - [x] Manual mobile smoke checklist is executed and logged for current stabilization PR (completed on 2026-04-30; see `docs/MIGRATION_STEP12_MOBILE_SMOKE_RESULTS.md`).
 - [x] Team confirms merge readiness and closes Step 12 officially (PR #2 merged, checks green, post-merge `npm run validate` passed).
-- [ ] Step 13 release hardening is merged to `main` (tracking in `docs/MIGRATION_STEP13_RELEASE_HARDENING.md`).
+- [x] Step 13 release hardening is merged to `main` (tracking in `docs/MIGRATION_STEP13_RELEASE_HARDENING.md`).
 
 ## 7) Rollout Plan
 - Feature flag: No (rollout is phased by migration steps and PR-based slices).

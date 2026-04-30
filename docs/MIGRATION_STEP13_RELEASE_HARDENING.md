@@ -73,4 +73,4 @@ Step 13 moves the migration from "working" to "release-ready" by strengthening a
 - [x] Mobile deterministic smoke script added.
 - [x] Root + CI quality gates tightened.
 - [x] Beta readiness checklist documented.
-- [ ] Step 13 PR merged to `main`.
+- [x] Step 13 PR merged to `main`.
