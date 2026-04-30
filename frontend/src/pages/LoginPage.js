@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
-import { createSessionManager, webStorage } from '@supplysync/core';
+import { buildLoginPayload, createSessionManager, webStorage } from '@supplysync/core';
 import api from '../utils/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -87,15 +87,8 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
-      const trimmedIdentifier = identifier.trim();
-      const isPhoneIdentifier = !trimmedIdentifier.includes('@');
-
-      const response = await api.post('/auth/login', {
-        // Phase 1: send one identity field based on user input type.
-        email: isPhoneIdentifier ? undefined : trimmedIdentifier,
-        phone: isPhoneIdentifier ? trimmedIdentifier : undefined,
-        password,
-      });
+      const payload = buildLoginPayload(identifier, password);
+      const response = await api.post('/auth/login', payload);
       await completeLogin(response);
     } catch (err) {
       setError(resolveLoginErrorMessage(err, t('auth:errors.invalid_credentials')));

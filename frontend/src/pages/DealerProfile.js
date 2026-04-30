@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { webStorage } from '@supplysync/core';
+import { profileFormSchema, toFieldErrors, webStorage } from '@supplysync/core';
 import DealerPageShell from '../components/DealerPageShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -72,6 +72,20 @@ const DealerProfile = () => {
   const handleSave = async () => {
     if (!isEditing) return;
     setMessage(null);
+    const validation = profileFormSchema.safeParse({
+      username: formData.username,
+      phone: formData.phone,
+      preferred_language: formData.preferred_language,
+    });
+    if (!validation.success) {
+      const fieldErrors = toFieldErrors(validation.error);
+      const firstMessage = Object.values(fieldErrors)[0];
+      setMessage({
+        type: 'error',
+        text: firstMessage || 'Please fix the highlighted profile fields.',
+      });
+      return;
+    }
     setSaving(true);
     try {
       const payload = {

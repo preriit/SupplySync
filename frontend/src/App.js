@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, matchPath } from 'react-router-dom';
-import { webStorage } from '@supplysync/core';
+import { createWebAuthHelpers, webStorage } from '@supplysync/core';
 import LoginPage from './pages/LoginPage';
 import SignUpPage from './pages/SignUpPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
@@ -26,27 +26,15 @@ import AdminAnalytics from './pages/AdminAnalytics';
 
 import './App.css';
 
-const parseStoredUser = (rawValue) => {
-  if (!rawValue) {
-    return {};
-  }
-  try {
-    return JSON.parse(rawValue);
-  } catch (_error) {
-    return {};
-  }
-};
-
 // Protected Route component for merchant user flows
 const ProtectedRoute = ({ children, allowedTypes = [] }) => {
-  const token = webStorage.getItem('token');
-  const user = parseStoredUser(webStorage.getItem('user'));
+  const authHelpers = createWebAuthHelpers(webStorage);
 
-  if (!token) {
+  if (!authHelpers.isAuthenticated('dealer')) {
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedTypes.length > 0 && !allowedTypes.includes(user.user_type)) {
+  if (!authHelpers.requireRole(allowedTypes, 'dealer')) {
     return <Navigate to="/" replace />;
   }
 
@@ -55,10 +43,9 @@ const ProtectedRoute = ({ children, allowedTypes = [] }) => {
 
 // Protected Route component for admin
 const AdminProtectedRoute = ({ children }) => {
-  const token = webStorage.getItem('admin_token');
-  const admin = parseStoredUser(webStorage.getItem('admin_user'));
+  const authHelpers = createWebAuthHelpers(webStorage);
 
-  if (!token || admin.user_type !== 'admin') {
+  if (!authHelpers.isAuthenticated('admin') || !authHelpers.requireRole(['admin'], 'admin')) {
     return <Navigate to="/admin/login" replace />;
   }
 

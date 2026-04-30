@@ -89,6 +89,7 @@ frontend/node_modules/.cache/default-development/0.pack
 **/*.py[cod]
 **/node_modules/.cache/
 apps/mobile/.expo/
+apps/mobile/dist-web/
 *.backup
 -e 
 # Environment files

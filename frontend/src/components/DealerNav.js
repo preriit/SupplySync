@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { createSessionManager, webStorage } from '@supplysync/core';
@@ -37,19 +37,7 @@ const DealerNav = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchQuery.trim().length >= 2) {
-        performSearch();
-      } else {
-        setSearchResults(null);
-        setShowResults(false);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  const performSearch = async () => {
+  const performSearch = useCallback(async () => {
     setSearching(true);
     try {
       const response = await api.get(`/dealer/search?q=${encodeURIComponent(searchQuery)}`);
@@ -60,7 +48,19 @@ const DealerNav = () => {
     } finally {
       setSearching(false);
     }
-  };
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery.trim().length >= 2) {
+        performSearch();
+      } else {
+        setSearchResults(null);
+        setShowResults(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, performSearch]);
 
   const handleResultClick = (result) => {
     if (result.type === 'subcategory') navigate(`/dealer/inventory/${result.id}/products`);

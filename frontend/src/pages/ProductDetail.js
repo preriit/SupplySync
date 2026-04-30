@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { webStorage } from '@supplysync/core';
 import DealerPageShell from '../components/DealerPageShell';
@@ -86,32 +86,25 @@ const ProductDetail = () => {
   const [images, setImages] = useState([]);
   const [recentTransactions, setRecentTransactions] = useState([]);
 
-  useEffect(() => {
-    fetchProduct();
-    fetchReferenceData();
-    fetchImages();
-    fetchRecentTransactions();
-  }, [productId]);
-  
-  const fetchImages = async () => {
+  const fetchImages = useCallback(async () => {
     try {
       const response = await api.get(`/dealer/products/${productId}/images`);
       setImages(response.data);
     } catch (error) {
       console.error('Error fetching images:', error);
     }
-  };
+  }, [productId]);
 
-  const fetchRecentTransactions = async () => {
+  const fetchRecentTransactions = useCallback(async () => {
     try {
       const response = await api.get(`/dealer/products/${productId}/transactions`);
       setRecentTransactions((response.data?.transactions || []).slice(0, 5));
     } catch (error) {
       setRecentTransactions([]);
     }
-  };
+  }, [productId]);
 
-  const fetchProduct = async () => {
+  const fetchProduct = useCallback(async () => {
     try {
       const response = await api.get(`/dealer/products/${productId}`);
       setProduct(response.data.product);
@@ -126,9 +119,9 @@ const ProductDetail = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate, productId, subcategoryId, toast]);
 
-  const fetchReferenceData = async () => {
+  const fetchReferenceData = useCallback(async () => {
     try {
       const [surfaces, applications, bodies, quals] = await Promise.all([
         api.get('/reference/surface-types'),
@@ -143,7 +136,14 @@ const ProductDetail = () => {
     } catch (error) {
       console.error('Failed to fetch reference data:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchProduct();
+    fetchReferenceData();
+    fetchImages();
+    fetchRecentTransactions();
+  }, [fetchImages, fetchProduct, fetchRecentTransactions, fetchReferenceData]);
 
   const handleEdit = () => {
     if (!canWriteInventory) {

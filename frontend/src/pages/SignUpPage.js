@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { signUpFormSchema, toFieldErrors } from '@supplysync/core';
 import { Eye, EyeOff, Building2, User, Phone, MapPin, Mail, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,41 +47,13 @@ const SignUpPage = () => {
   };
 
   const validateForm = () => {
-    const newErrors = {};
-
-    // Required fields validation
-    if (!formData.businessName.trim()) newErrors.businessName = 'Business name is required';
-    if (!formData.ownerName.trim()) newErrors.ownerName = 'Owner name is required';
-    if (!formData.mobileNumber.trim()) {
-      newErrors.mobileNumber = 'Mobile number is required';
-    } else if (!/^\d{10}$/.test(formData.mobileNumber)) {
-      newErrors.mobileNumber = 'Mobile number must be 10 digits';
+    const result = signUpFormSchema.safeParse(formData);
+    if (result.success) {
+      setErrors({});
+      return true;
     }
-    if (!formData.city.trim()) newErrors.city = 'City is required';
-    if (!formData.state.trim()) newErrors.state = 'State is required';
-    if (!formData.postalCode.trim()) {
-      newErrors.postalCode = 'Postal code is required';
-    } else if (!/^\d{6}$/.test(formData.postalCode)) {
-      newErrors.postalCode = 'Postal code must be 6 digits';
-    }
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Invalid email format';
-    }
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
-    }
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
-    } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setErrors(toFieldErrors(result.error));
+    return false;
   };
 
   const handleSubmit = async (e) => {
