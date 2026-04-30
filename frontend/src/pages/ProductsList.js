@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { webStorage } from '@supplysync/core';
@@ -260,11 +260,7 @@ const ProductsList = () => {
   const isDashboardFilterApplied = stockFilter === 'low' || stockFilter === 'out';
   const dashboardFilterLabel = stockFilter === 'low' ? 'low-stock' : 'out-of-stock';
 
-  useEffect(() => {
-    fetchProducts();
-  }, [subcategoryId]);
-
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
       const response = await api.get(`/dealer/subcategories/${subcategoryId}/products`);
       setSubcategory(response.data.subcategory);
@@ -274,7 +270,11 @@ const ProductsList = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [subcategoryId]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
   const handleAddProduct = () => {
     navigate(`/dealer/inventory/${subcategoryId}/products/add`);

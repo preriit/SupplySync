@@ -18,24 +18,7 @@ const ImageUpload = ({ productId, images = [], onImagesChange }) => {
     }
   }, []);
 
-  const handleDrop = useCallback(async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      await handleFiles(e.dataTransfer.files);
-    }
-  }, [productId]);
-
-  const handleChange = async (e) => {
-    e.preventDefault();
-    if (e.target.files && e.target.files.length > 0) {
-      await handleFiles(e.target.files);
-    }
-  };
-
-  const handleFiles = async (fileList) => {
+  const handleFiles = useCallback(async (fileList) => {
     setUploading(true);
     try {
       const formData = new FormData();
@@ -81,6 +64,23 @@ const ImageUpload = ({ productId, images = [], onImagesChange }) => {
       });
     } finally {
       setUploading(false);
+    }
+  }, [onImagesChange, productId, toast]);
+
+  const handleDrop = useCallback(async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await handleFiles(e.dataTransfer.files);
+    }
+  }, [handleFiles]);
+
+  const handleChange = async (e) => {
+    e.preventDefault();
+    if (e.target.files && e.target.files.length > 0) {
+      await handleFiles(e.target.files);
     }
   };
 

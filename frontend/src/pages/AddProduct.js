@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import DealerPageShell from '../components/DealerPageShell';
@@ -39,26 +39,7 @@ const AddProduct = () => {
   const [message, setMessage] = useState(null);
   const [errors, setErrors] = useState({});
 
-  useEffect(() => {
-    fetchData();
-  }, [subcategoryId]);
-
-  useEffect(() => {
-    if (!subcategory) return;
-    setFormData((prev) => ({
-      ...prev,
-      // Prefer API defaults (includes size / make-type fallbacks from backend)
-      application_type_id:
-        subcategory.application_type_id ?? prev.application_type_id ?? '',
-      body_type_id: subcategory.body_type_id ?? prev.body_type_id ?? '',
-      packing_per_box:
-        subcategory.default_packing_per_box != null && subcategory.default_packing_per_box !== ''
-          ? String(subcategory.default_packing_per_box)
-          : prev.packing_per_box || '0',
-    }));
-  }, [subcategory]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!subcategoryId) return;
     try {
       const [subcatRes, surfaceRes, appRes, bodyRes, qualityRes] = await Promise.all([
@@ -77,7 +58,26 @@ const AddProduct = () => {
     } catch (error) {
       console.error('Failed to fetch data:', error);
     }
-  };
+  }, [subcategoryId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    if (!subcategory) return;
+    setFormData((prev) => ({
+      ...prev,
+      // Prefer API defaults (includes size / make-type fallbacks from backend)
+      application_type_id:
+        subcategory.application_type_id ?? prev.application_type_id ?? '',
+      body_type_id: subcategory.body_type_id ?? prev.body_type_id ?? '',
+      packing_per_box:
+        subcategory.default_packing_per_box != null && subcategory.default_packing_per_box !== ''
+          ? String(subcategory.default_packing_per_box)
+          : prev.packing_per_box || '0',
+    }));
+  }, [subcategory]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
