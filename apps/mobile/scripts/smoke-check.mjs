@@ -22,8 +22,20 @@ async function ensureFileExists(relativePath) {
 }
 
 async function verifyBackendEnv() {
+  if (process.env.EXPO_PUBLIC_BACKEND_URL) {
+    return;
+  }
   const envPath = path.join(mobileRoot, '.env');
-  const content = await readFile(envPath, 'utf8');
+  let content = '';
+  try {
+    content = await readFile(envPath, 'utf8');
+  } catch (_error) {
+    if (process.env.CI) {
+      console.warn('apps/mobile/.env not found in CI, skipping local env file check');
+      return;
+    }
+    throw new Error('Missing apps/mobile/.env and EXPO_PUBLIC_BACKEND_URL env var');
+  }
   const hasBackendVar = /^EXPO_PUBLIC_BACKEND_URL=.+$/m.test(content);
   if (!hasBackendVar) {
     throw new Error('Missing EXPO_PUBLIC_BACKEND_URL in apps/mobile/.env');
