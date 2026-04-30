@@ -14,8 +14,10 @@
     "mobile:start": "npm run start --workspace apps/mobile",
     "web:test": "npm run test:ci --workspace frontend",
     "mobile:web:build": "npm run build:web --workspace apps/mobile",
+    "mobile:smoke": "npm run smoke:ci --workspace @supplysync/mobile",
+    "core:test": "npm run test --workspace @supplysync/core",
     "core:validate": "npm run validate --workspace @supplysync/core",
     "ui:validate": "npm run validate --workspace @supplysync/ui",
-    "validate": "npm run core:validate && npm run ui:validate && npm run web:build && npm run web:test && npm run mobile:web:build"
+    "validate": "npm run core:validate && npm run core:test && npm run ui:validate && npm run web:build && npm run web:test && npm run mobile:smoke && npm run mobile:web:build"
   }
 }

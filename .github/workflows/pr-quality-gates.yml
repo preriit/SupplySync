@@ -27,6 +27,7 @@ jobs:
       - name: Validate shared packages
         run: |
           npm run core:validate
+          npm run core:test
           npm run ui:validate
 
       - name: Validate web app
@@ -35,4 +36,6 @@ jobs:
           npm run web:test
 
       - name: Validate mobile web bundle
-        run: npm run mobile:web:build
+        run: |
+          npm run mobile:smoke
+          npm run mobile:web:build
