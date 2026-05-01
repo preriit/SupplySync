@@ -18,6 +18,9 @@ function resolveLoginErrorMessage(error) {
   if (typeof detail === 'string' && detail.trim()) {
     return detail;
   }
+  if (error?.code === 'ECONNABORTED') {
+    return 'Login request timed out. Check backend logs, API URL, and network, then retry.';
+  }
   if (!error?.response) {
     return 'Cannot reach backend API. Set EXPO_PUBLIC_BACKEND_URL to your laptop IP (not localhost).';
   }

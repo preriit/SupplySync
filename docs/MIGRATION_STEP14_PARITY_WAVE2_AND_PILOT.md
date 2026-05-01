@@ -60,20 +60,20 @@
 
 ## Progress Tracker
 
-- Status: In Progress
+- Status: Completed
 - Owner: Engineering
-- Current slice: Scope lock and pilot kickoff prep
+- Current slice: Step 14 closure and rollout recommendation logged
 - Blocker: None
-- ETA: 2026-05-10 (initial target, revise after pilot week 1)
-- Last updated: 2026-04-30
+- ETA: Completed 2026-05-01
+- Last updated: 2026-05-01
 
 Checklist:
 - [x] Scope lock complete
 - [x] Wave 2 slice 1 shipped
 - [x] Wave 2 slice 2 shipped
 - [x] Pilot started
-- [ ] Pilot monitored and documented
-- [ ] Step 14 closed
+- [x] Pilot monitored and documented
+- [x] Step 14 closed
 
 ## Wave 2 Scope Lock (Kickoff)
 

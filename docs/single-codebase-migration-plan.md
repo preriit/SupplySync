@@ -47,6 +47,8 @@
 - [x] Manual mobile smoke checklist is executed and logged for current stabilization PR (completed on 2026-04-30; see `docs/MIGRATION_STEP12_MOBILE_SMOKE_RESULTS.md`).
 - [x] Team confirms merge readiness and closes Step 12 officially (PR #2 merged, checks green, post-merge `npm run validate` passed).
 - [x] Step 13 release hardening is merged to `main` (tracking in `docs/MIGRATION_STEP13_RELEASE_HARDENING.md`).
+- [x] Step 14 parity wave 2 + pilot rollout is completed and documented (tracking in `docs/features/MIGRATION_STEP14_PARITY_WAVE2_AND_PILOT.md`).
+- [x] Step 15 post-pilot hardening + admin baseline is delivered and validated (tracking in `docs/features/MIGRATION_STEP15_POST_PILOT_HARDENING_AND_ADMIN_BASELINE.md`).
 
 ## 7) Rollout Plan
 - Feature flag: No (rollout is phased by migration steps and PR-based slices).
@@ -73,3 +75,5 @@
   - `docs/MIGRATION_STEP10_MOBILE_PARITY_WAVE1.md`
   - `docs/MIGRATION_STEP12_STABILIZATION_PLAN.md`
   - `docs/MIGRATION_STEP13_RELEASE_HARDENING.md`
+  - `docs/features/MIGRATION_STEP14_PARITY_WAVE2_AND_PILOT.md`
+  - `docs/features/MIGRATION_STEP15_POST_PILOT_HARDENING_AND_ADMIN_BASELINE.md`

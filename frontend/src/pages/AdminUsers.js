@@ -14,6 +14,7 @@ const AdminUsers = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [updatingUserId, setUpdatingUserId] = useState(null);
 
   useEffect(() => {
     fetchUsers();
@@ -38,18 +39,33 @@ const AdminUsers = () => {
   };
 
   const toggleUserStatus = async (userId, currentStatus) => {
+    const nextStatus = !currentStatus;
+    const actionLabel = nextStatus ? 'activate' : 'suspend';
+    const confirmed = window.confirm(`Are you sure you want to ${actionLabel} this user?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setUpdatingUserId(userId);
     try {
       const token = webStorage.getItem('admin_token');
       await api.put(
         `/admin/users/${userId}/status`,
-        { is_active: !currentStatus },
+        { is_active: nextStatus },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
-      toast.success(`User ${!currentStatus ? 'activated' : 'suspended'} successfully`);
-      fetchUsers();
+
+      setUsers((prevUsers) =>
+        prevUsers.map((user) =>
+          user.id === userId ? { ...user, is_active: nextStatus } : user
+        )
+      );
+      toast.success(`User ${nextStatus ? 'activated' : 'suspended'} successfully`);
     } catch (error) {
-      toast.error('Failed to update user status');
+      const message = error?.response?.data?.detail || 'Failed to update user status';
+      toast.error(message);
+    } finally {
+      setUpdatingUserId(null);
     }
   };
 
@@ -118,8 +134,12 @@ const AdminUsers = () => {
               <div className="text-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange mx-auto"></div>
               </div>
-            ) : (
-              <div className="overflow-x-auto">
+            ) : filteredUsers.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  No users found for the current search and filter.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-slate-700">
@@ -171,10 +191,13 @@ const AdminUsers = () => {
                             <Button
                               size="sm"
                               variant="outline"
+                              disabled={updatingUserId === user.id}
                               onClick={() => toggleUserStatus(user.id, user.is_active)}
-                              className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                              className="border-slate-600 text-slate-300 hover:bg-slate-700 disabled:opacity-60"
                             >
-                              {user.is_active ? (
+                              {updatingUserId === user.id ? (
+                                'Updating...'
+                              ) : user.is_active ? (
                                 <>
                                   <Ban className="h-3 w-3 mr-1" />
                                   Suspend
@@ -193,6 +216,7 @@ const AdminUsers = () => {
                   </tbody>
                 </table>
               </div>
+              )}
             )}
           </CardContent>
         </Card>

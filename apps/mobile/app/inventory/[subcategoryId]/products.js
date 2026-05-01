@@ -17,6 +17,8 @@ export default function ProductsScreen() {
   const [subcategory, setSubcategory] = useState(null);
   const [products, setProducts] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [stockFilter, setStockFilter] = useState('all');
+  const [surfaceFilter, setSurfaceFilter] = useState('all');
   const [loadingText, setLoadingText] = useState('Loading products...');
   const [error, setError] = useState('');
 
@@ -45,10 +47,22 @@ export default function ProductsScreen() {
     };
   }, [subcategoryId]);
 
-  const visibleProducts = useMemo(
-    () => products.filter((product) => matchesSearch(product, searchTerm.trim())),
-    [products, searchTerm]
-  );
+  const surfaceOptions = useMemo(() => {
+    const unique = Array.from(new Set(products.map((item) => item.surface_type).filter(Boolean)));
+    return ['all', ...unique];
+  }, [products]);
+
+  const visibleProducts = useMemo(() => {
+    const term = searchTerm.trim();
+    return products.filter((product) => {
+      const qty = Number(product.current_quantity || 0);
+      if (stockFilter === 'in' && qty <= 0) return false;
+      if (stockFilter === 'low' && !(qty > 0 && qty < 20)) return false;
+      if (stockFilter === 'out' && qty !== 0) return false;
+      if (surfaceFilter !== 'all' && (product.surface_type || '') !== surfaceFilter) return false;
+      return matchesSearch(product, term);
+    });
+  }, [products, searchTerm, stockFilter, surfaceFilter]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -57,6 +71,12 @@ export default function ProductsScreen() {
           <Text style={styles.linkButtonText}>Back</Text>
         </Pressable>
         <Text style={styles.title}>{subcategory?.name || 'Products'}</Text>
+        <Pressable
+          style={styles.addButton}
+          onPress={() => router.push(`/inventory/${subcategoryId}/products/add`)}
+        >
+          <Text style={styles.addButtonText}>+ Add</Text>
+        </Pressable>
       </View>
 
       <TextInput
@@ -65,6 +85,37 @@ export default function ProductsScreen() {
         value={searchTerm}
         onChangeText={setSearchTerm}
       />
+      <View style={styles.filterRow}>
+        {[
+          { id: 'all', label: 'All' },
+          { id: 'in', label: 'In Stock' },
+          { id: 'low', label: 'Low' },
+          { id: 'out', label: 'Out' },
+        ].map((item) => (
+          <Pressable
+            key={item.id}
+            style={[styles.filterChip, stockFilter === item.id ? styles.filterChipActive : null]}
+            onPress={() => setStockFilter(item.id)}
+          >
+            <Text style={[styles.filterChipText, stockFilter === item.id ? styles.filterChipTextActive : null]}>
+              {item.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      <View style={styles.filterRow}>
+        {surfaceOptions.map((surface) => (
+          <Pressable
+            key={surface}
+            style={[styles.filterChip, surfaceFilter === surface ? styles.filterChipActive : null]}
+            onPress={() => setSurfaceFilter(surface)}
+          >
+            <Text style={[styles.filterChipText, surfaceFilter === surface ? styles.filterChipTextActive : null]}>
+              {surface === 'all' ? 'Surface: All' : surface}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
 
       {loadingText ? <Text style={styles.loadingText}>{loadingText}</Text> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -97,6 +148,23 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: '700', color: '#0F172A', flex: 1 },
   linkButton: { backgroundColor: '#0F172A', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
   linkButtonText: { color: '#FFFFFF', fontWeight: '600' },
+  addButton: { backgroundColor: '#EA580C', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+  addButtonText: { color: '#FFFFFF', fontWeight: '700' },
+  filterRow: { marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filterChip: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  filterChipActive: {
+    borderColor: '#EA580C',
+    backgroundColor: '#FFEDD5',
+  },
+  filterChipText: { color: '#334155', fontSize: 12 },
+  filterChipTextActive: { color: '#C2410C', fontWeight: '700' },
   search: {
     marginTop: 12,
     backgroundColor: '#FFFFFF',

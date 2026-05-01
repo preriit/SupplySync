@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+const REQUEST_TIMEOUT_MS = 15000;
+
 function normalizeApiBaseUrl(rawBaseUrl) {
   const normalizedBaseUrl = (rawBaseUrl || 'http://localhost:8001').replace(/\/+$/, '');
   return normalizedBaseUrl.endsWith('/api')
@@ -26,6 +28,7 @@ export function createApiClient({
   const api = axios.create({
     baseURL: normalizeApiBaseUrl(baseUrl),
     headers: { 'Content-Type': 'application/json' },
+    timeout: REQUEST_TIMEOUT_MS,
   });
 
   api.interceptors.request.use(async (config) => {

@@ -17,9 +17,22 @@ pwd_context = CryptContext(
 )
 security = HTTPBearer()
 
-JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY')
 JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get('ACCESS_TOKEN_EXPIRE_MINUTES', 43200))
+
+
+def _get_jwt_secret_key() -> str:
+    """Resolve JWT key at call time so late-loaded env vars are honored."""
+    configured_key = os.environ.get('JWT_SECRET_KEY')
+    if configured_key:
+        return configured_key
+
+    app_env = os.environ.get('APP_ENV', 'development').strip().lower()
+    if app_env != 'production':
+        # Keep local/dev login functional even when backend/.env is missing.
+        return 'dev-insecure-jwt-secret'
+
+    raise RuntimeError('JWT_SECRET_KEY is not configured')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     if not hashed_password:
@@ -39,7 +52,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, _get_jwt_secret_key(), algorithm=JWT_ALGORITHM)
     return encoded_jwt
 
 async def get_current_user(
@@ -53,7 +66,7 @@ async def get_current_user(
     )
     try:
         token = credentials.credentials
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(token, _get_jwt_secret_key(), algorithms=[JWT_ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
