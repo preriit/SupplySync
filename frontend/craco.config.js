@@ -88,16 +88,39 @@ const webpackConfig = {
     configure: (webpackConfig) => {
       withTailwindPostCss(webpackConfig);
 
+      // CRA's ModuleScopePlugin blocks importing packages resolved outside `src/` (including via
+      // resolve.alias). Removing it allows forcing a single React instance below — needed because
+      // some nested deps resolve React 19 while the app uses React 18, which breaks Radix (Dialog,
+      // Select) with "Cannot read properties of null (reading 'useRef' / 'useMemo')".
+      webpackConfig.resolve.plugins = (webpackConfig.resolve.plugins || []).filter(
+        (plugin) =>
+          !plugin ||
+          (plugin.constructor && plugin.constructor.name !== 'ModuleScopePlugin')
+      );
+
+      const reactPkgDir = path.dirname(
+        require.resolve('react/package.json', { paths: [path.resolve(__dirname)] })
+      );
+      const reactDomPkgDir = path.dirname(
+        require.resolve('react-dom/package.json', { paths: [path.resolve(__dirname)] })
+      );
+
+      webpackConfig.resolve.alias = {
+        ...webpackConfig.resolve.alias,
+        react: reactPkgDir,
+        'react-dom': reactDomPkgDir,
+      };
+
       // Add ignored patterns to reduce watched directories
-        webpackConfig.watchOptions = {
-          ...webpackConfig.watchOptions,
-          ignored: [
-            '**/node_modules/**',
-            '**/.git/**',
-            '**/build/**',
-            '**/dist/**',
-            '**/coverage/**',
-            '**/public/**',
+      webpackConfig.watchOptions = {
+        ...webpackConfig.watchOptions,
+        ignored: [
+          '**/node_modules/**',
+          '**/.git/**',
+          '**/build/**',
+          '**/dist/**',
+          '**/coverage/**',
+          '**/public/**',
         ],
       };
 

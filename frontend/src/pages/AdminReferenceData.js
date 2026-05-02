@@ -95,7 +95,7 @@ const AdminReferenceData = () => {
     const myId = summaryRequestId.current;
     try {
       const token = webStorage.getItem('admin_token');
-      const response = await api.get('/admin/reference-data-summary', {
+      const response = await api.get('/admin/reference-data/summary', {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (myId !== summaryRequestId.current) return;

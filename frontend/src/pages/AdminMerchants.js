@@ -223,20 +223,30 @@ const AdminMerchants = () => {
                         <td className="py-3 px-4">
                           <div className="flex items-center space-x-2">
                             <Select
-                              onValueChange={(value) => updateMerchantStatus(merchant.id, merchant.is_active, value)}
+                              onValueChange={(value) =>
+                                updateMerchantStatus(merchant.id, merchant.is_active, value)
+                              }
                               defaultValue={merchant.subscription_status || 'trial'}
                             >
                               <SelectTrigger className="w-32 h-8 text-xs bg-slate-900 border-slate-600 text-white">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent className="bg-slate-800 border-slate-700">
-                                <SelectItem value="trial" className="text-white">Trial</SelectItem>
-                                <SelectItem value="active" className="text-white">Active</SelectItem>
-                                <SelectItem value="expired" className="text-white">Expired</SelectItem>
-                                <SelectItem value="suspended" className="text-white">Suspended</SelectItem>
+                                <SelectItem value="trial" className="text-white">
+                                  Trial
+                                </SelectItem>
+                                <SelectItem value="active" className="text-white">
+                                  Active
+                                </SelectItem>
+                                <SelectItem value="expired" className="text-white">
+                                  Expired
+                                </SelectItem>
+                                <SelectItem value="suspended" className="text-white">
+                                  Suspended
+                                </SelectItem>
                               </SelectContent>
                             </Select>
-                            
+
                             <Button
                               size="sm"
                               variant="outline"
