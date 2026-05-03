@@ -16,6 +16,7 @@ This roadmap is intentionally lightweight. Reprioritize weekly based on user fee
 - Expand automated coverage beyond smoke tests (more integration-style tests for high-risk flows).
 - Progress to parity wave 2 (next highest-value dealer/admin workflows).
 - Continue hardening CI and release discipline as test coverage grows.
+- Mobile UX direction: see `docs/MOBILE_UX_WAVE2.md`.
 
 ### Why this matters (plain terms)
 - We can now build many features once in shared code, instead of rewriting logic per platform.

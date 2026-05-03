@@ -1669,6 +1669,97 @@ async def update_team_member_via_post(
     """POST alias for environments where PUT may be blocked."""
     return await update_team_member(member_id, request, current_user, db)
 
+
+def build_recent_activity_feed(db: Session, merchant_id, limit: int) -> List[dict]:
+    """Product activity rows for dealer dashboard / mobile recent activity screens."""
+    safe_limit = max(1, min(int(limit or 5), 100))
+    recent_activities = db.query(
+        ProductActivityLog.activity_type,
+        ProductActivityLog.description,
+        ProductActivityLog.changes,
+        ProductActivityLog.created_at,
+        User.username,
+        User.email,
+        Product.brand,
+        Product.name,
+    ).join(
+        Product,
+        ProductActivityLog.product_id == Product.id,
+    ).outerjoin(
+        User,
+        ProductActivityLog.user_id == User.id,
+    ).filter(
+        ProductActivityLog.merchant_id == merchant_id,
+    ).order_by(
+        ProductActivityLog.created_at.desc(),
+    ).limit(safe_limit).all()
+
+    formatted_activities: List[dict] = []
+    for activity in recent_activities:
+        activity_type, description, changes, created_at, username, email, brand, product_name = activity
+
+        tile_name = _brand_product_label(brand, product_name)
+
+        if activity_type == "created":
+            title = f"Added new product: {tile_name}"
+        elif activity_type == "edited":
+            title = f"Updated product: {tile_name}"
+        elif activity_type == "deleted":
+            title = f"Deleted product: {tile_name}"
+        elif activity_type == "quantity_add":
+            if changes:
+                quantity = abs(int(changes.get("quantity_change", 1) or 1))
+                before = changes.get("from", 0)
+                after = changes.get("to", 0)
+                title = f"Add {quantity} boxes {tile_name} : {before} → {after}"
+            else:
+                title = f"Added stock to {tile_name}"
+        elif activity_type == "quantity_subtract":
+            if changes:
+                quantity = abs(int(changes.get("quantity_change", 1) or 1))
+                before = changes.get("from", 0)
+                after = changes.get("to", 0)
+                title = f"Subtract {quantity} boxes {tile_name} : {before} → {after}"
+            else:
+                title = f"Removed stock from {tile_name}"
+        else:
+            title = f"{activity_type.title()} {tile_name}"
+
+        created_at_utc = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+        if created_at_utc.tzinfo != timezone.utc:
+            created_at_utc = created_at_utc.astimezone(timezone.utc)
+        time_diff = datetime.now(timezone.utc) - created_at_utc
+        if time_diff.days > 0:
+            if time_diff.days == 1:
+                time_ago = "Yesterday"
+            elif time_diff.days < 7:
+                time_ago = f"{time_diff.days} days ago"
+            else:
+                time_ago = created_at.strftime("%b %d, %Y")
+        elif time_diff.seconds >= 3600:
+            hours = time_diff.seconds // 3600
+            time_ago = f"{hours} hour{'s' if hours > 1 else ''} ago"
+        elif time_diff.seconds >= 60:
+            minutes = time_diff.seconds // 60
+            time_ago = f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+        else:
+            time_ago = "Just now"
+
+        actor = (username or "").strip() or (email or "").strip() or "System"
+
+        formatted_activities.append(
+            {
+                "title": title,
+                "time": time_ago,
+                "created_at": created_at_utc.isoformat(),
+                "action": activity_type,
+                "actor": actor,
+            }
+        )
+
+    return formatted_activities
+
+
 # Dashboard Routes
 @api_router.get("/dealer/dashboard/stats")
 async def get_dashboard_stats(
@@ -1796,27 +1887,7 @@ async def get_dashboard_stats(
     # Total inventory value - NOTE: Price not implemented yet
     inventory_value = 0  # Will be calculated once pricing is added
     
-    # Recent Activity - Get last 5 activities with product details
-    recent_activities = db.query(
-        ProductActivityLog.activity_type,
-        ProductActivityLog.description,
-        ProductActivityLog.changes,
-        ProductActivityLog.created_at,
-        User.username,
-        User.email,
-        Product.brand,
-        Product.name
-    ).join(
-        Product, 
-        ProductActivityLog.product_id == Product.id
-    ).outerjoin(
-        User,
-        ProductActivityLog.user_id == User.id
-    ).filter(
-        ProductActivityLog.merchant_id == merchant_id
-    ).order_by(
-        ProductActivityLog.created_at.desc()
-    ).limit(5).all()  # Changed from 10 to 5
+    formatted_activities = build_recent_activity_feed(db, merchant_id, 10)
 
     # Fast-moving products (last 30 days): highest outward movement.
     fast_moving_rows = db.query(
@@ -1915,73 +1986,6 @@ async def get_dashboard_stats(
             "is_urgent": is_urgent,
         })
     
-    # Format recent activities for frontend
-    formatted_activities = []
-    for activity in recent_activities:
-        activity_type, description, changes, created_at, username, email, brand, product_name = activity
-        
-        # Create product display name
-        tile_name = _brand_product_label(brand, product_name)
-        
-        # Create human-readable title with more details
-        if activity_type == 'created':
-            title = f"Added new product: {tile_name}"
-        elif activity_type == 'edited':
-            title = f"Updated product: {tile_name}"
-        elif activity_type == 'deleted':
-            title = f"Deleted product: {tile_name}"
-        elif activity_type == 'quantity_add':
-            # Extract quantity and values from changes JSON
-            if changes:
-                quantity = abs(int(changes.get('quantity_change', 1) or 1))
-                before = changes.get('from', 0)
-                after = changes.get('to', 0)
-                title = f"Add {quantity} boxes {tile_name} : {before} → {after}"
-            else:
-                title = f"Added stock to {tile_name}"
-        elif activity_type == 'quantity_subtract':
-            # Extract quantity and values from changes JSON
-            if changes:
-                quantity = abs(int(changes.get('quantity_change', 1) or 1))
-                before = changes.get('from', 0)
-                after = changes.get('to', 0)
-                title = f"Subtract {quantity} boxes {tile_name} : {before} → {after}"
-            else:
-                title = f"Removed stock from {tile_name}"
-        else:
-            title = f"{activity_type.title()} {tile_name}"
-        
-        # Calculate time ago
-        created_at_utc = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
-        if created_at_utc.tzinfo != timezone.utc:
-            created_at_utc = created_at_utc.astimezone(timezone.utc)
-        time_diff = datetime.now(timezone.utc) - created_at_utc
-        if time_diff.days > 0:
-            if time_diff.days == 1:
-                time_ago = "Yesterday"
-            elif time_diff.days < 7:
-                time_ago = f"{time_diff.days} days ago"
-            else:
-                time_ago = created_at.strftime("%b %d, %Y")
-        elif time_diff.seconds >= 3600:
-            hours = time_diff.seconds // 3600
-            time_ago = f"{hours} hour{'s' if hours > 1 else ''} ago"
-        elif time_diff.seconds >= 60:
-            minutes = time_diff.seconds // 60
-            time_ago = f"{minutes} minute{'s' if minutes > 1 else ''} ago"
-        else:
-            time_ago = "Just now"
-        
-        actor = (username or "").strip() or (email or "").strip() or "System"
-
-        formatted_activities.append({
-            "title": title,
-            "time": time_ago,
-            "created_at": created_at_utc.isoformat(),
-            "action": activity_type,
-            "actor": actor,
-        })
-    
     return {
         "total_products": total_products or 0,
         "active_products": active_products or 0,
@@ -2005,6 +2009,18 @@ async def get_dashboard_stats(
         "fast_moving_products": fast_moving_products,
         "dead_stock_products": dead_stock_products,
     }
+
+
+@api_router.get("/dealer/dashboard/recent-activity")
+async def get_dashboard_recent_activity(
+    limit: int = 50,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Recent product activity for dealer mobile/web 'View all' (same rows as dashboard preview, larger cap)."""
+    require_merchant_read_access(current_user)
+    activities = build_recent_activity_feed(db, current_user.merchant_id, limit)
+    return {"activities": activities, "count": len(activities)}
 
 
 @api_router.get("/dealer/dashboard/products-list")

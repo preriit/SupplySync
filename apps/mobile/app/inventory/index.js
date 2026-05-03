@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DealerTabBar } from '../../components/DealerTabBar';
 import { api } from '../../lib/api';
 
 function getStockLabel(subcategory) {
@@ -47,18 +48,16 @@ export default function InventoryScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Inventory</Text>
-        <Pressable style={styles.linkButton} onPress={() => router.replace('/dashboard')}>
-          <Text style={styles.linkButtonText}>Dashboard</Text>
-        </Pressable>
       </View>
 
       {loadingText ? <Text style={styles.loadingText}>{loadingText}</Text> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       <FlatList
+        style={styles.listFlex}
         data={subcategories}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.listContent}
@@ -79,17 +78,17 @@ export default function InventoryScreen() {
         )}
         ListEmptyComponent={!loadingText && !error ? <Text>No categories yet.</Text> : null}
       />
+      <DealerTabBar current="inventory" />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F6FA', padding: 16 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  container: { flex: 1, backgroundColor: '#F5F6FA', paddingHorizontal: 16 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 },
   title: { fontSize: 24, fontWeight: '700', color: '#0F172A' },
-  linkButton: { backgroundColor: '#0F172A', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  linkButtonText: { color: '#FFFFFF', fontWeight: '600' },
-  listContent: { paddingTop: 16, paddingBottom: 24, gap: 12 },
+  listFlex: { flex: 1 },
+  listContent: { paddingTop: 16, paddingBottom: 100, gap: 12 },
   card: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 14, gap: 4 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
   cardMeta: { color: '#475569' },

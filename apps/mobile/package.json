@@ -12,6 +12,7 @@
     "smoke:ci": "node ./scripts/smoke-check.mjs"
   },
   "dependencies": {
+    "@expo/vector-icons": "^15.0.3",
     "@supplysync/core": "*",
     "expo": "^54.0.21",
     "expo-router": "~6.0.23",

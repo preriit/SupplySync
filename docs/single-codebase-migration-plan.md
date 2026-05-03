@@ -66,6 +66,7 @@
   - Which dealer/admin flows should be prioritized in parity wave 2?
 
 ## 9) Links
+- **After migration checklist:** operating plan for **mobile- and tablet-first** dealers — `docs/MOBILE_FIRST_PLAN_AND_TRACKER.md`
 - Related ADRs: `docs/MIGRATION_STEP2_ARCHITECTURE.md`, `docs/MIGRATION_STEP3_SHARED_CORE.md`, `docs/MIGRATION_STEP4_ADAPTERS.md`
 - Related tickets: Migration steps tracked in:
   - `docs/MIGRATION_STEP5_NAVIGATION_AND_LOGIN.md`

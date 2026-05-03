@@ -12,8 +12,14 @@ const requiredFiles = [
   'app/inventory/index.js',
   'app/inventory/[subcategoryId]/products.js',
   'app/inventory/[subcategoryId]/products/[productId].js',
+  'app/search.js',
+  'app/stock-alerts.js',
+  'app/activity.js',
+  'app/more.js',
+  'components/DealerTabBar.js',
   'lib/api.js',
   'lib/storage.js',
+  'lib/dashboardAlertDigest.js',
 ];
 
 async function ensureFileExists(relativePath) {
