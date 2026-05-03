@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { createAuthHelpers, createSessionManager } from '@supplysync/core';
 import {
   ActivityIndicator,
@@ -16,6 +15,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DealerAppBar } from '../components/DealerAppBar';
+import { DealerMenuSheet } from '../components/DealerMenuSheet';
 import { DealerTabBar } from '../components/DealerTabBar';
 import { api } from '../lib/api';
 import { buildDashboardAlertDigest, DASHBOARD_ALERT_DIGEST_KEY } from '../lib/dashboardAlertDigest';
@@ -130,12 +131,6 @@ export default function DashboardScreen() {
     }).start();
   }, [notifAnim, notifOpen]);
 
-  const handleLogout = async () => {
-    setMenuOpen(false);
-    await dealerSessionManager.clearSession('dealer');
-    router.replace('/login');
-  };
-
   const totalProducts = Number(stats?.total_products ?? 0);
   const lowSkus = Number(stats?.low_stock_skus ?? 0);
   const outSkus = Number(stats?.out_of_stock_skus ?? 0);
@@ -162,48 +157,14 @@ export default function DashboardScreen() {
     router.push({ pathname: '/search', params: { q } });
   };
 
-  const renderBottomSheet = (visible, onClose, title, children, { headerRight = null } = {}) => (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalRoot}>
-        <Pressable style={styles.modalBackdrop} onPress={onClose} accessibilityLabel="Dismiss" />
-        <View style={styles.modalSheet}>
-          <View style={styles.modalTitleRow}>
-            <Text style={styles.modalTitle}>{title}</Text>
-            {headerRight}
-          </View>
-          {children}
-          <Pressable style={styles.modalClose} onPress={onClose}>
-            <Text style={styles.modalCloseText}>Close</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
-
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <View style={styles.topBar}>
-        <Pressable
-          accessibilityLabel="Open menu"
-          style={styles.iconHit}
-          onPress={() => setMenuOpen(true)}
-        >
-          <Text style={styles.iconGlyph}>☰</Text>
-        </Pressable>
-        <Text style={styles.logoText}>
-          Supply<Text style={styles.logoAccent}>Sync</Text>
-        </Text>
-        <Pressable
-          accessibilityLabel={
-            hasUnreadAlerts ? 'Unread notifications. Open for details.' : 'Notifications'
-          }
-          style={styles.iconHit}
-          onPress={() => setNotifOpen(true)}
-        >
-          <Ionicons name="notifications-outline" size={24} color={SLATE} />
-          {hasUnreadAlerts ? <View style={styles.bellUnreadDot} accessibilityElementsHidden /> : null}
-        </Pressable>
-      </View>
+      <DealerAppBar
+        onMenuPress={() => setMenuOpen(true)}
+        rightAction="notifications"
+        showUnreadDot={hasUnreadAlerts}
+        onNotificationsPress={() => setNotifOpen(true)}
+      />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -375,43 +336,7 @@ export default function DashboardScreen() {
 
       <DealerTabBar current="dashboard" />
 
-      {renderBottomSheet(
-        menuOpen,
-        () => setMenuOpen(false),
-        'Menu',
-        <View style={styles.menuBody}>
-          <Pressable
-            style={styles.menuRow}
-            onPress={() => {
-              setMenuOpen(false);
-              router.push('/inventory');
-            }}
-          >
-            <Text style={styles.menuRowText}>Inventory</Text>
-          </Pressable>
-          <Pressable
-            style={styles.menuRow}
-            onPress={() => {
-              setMenuOpen(false);
-              router.push('/activity');
-            }}
-          >
-            <Text style={styles.menuRowText}>Recent activity</Text>
-          </Pressable>
-          <Pressable
-            style={styles.menuRow}
-            onPress={() => {
-              setMenuOpen(false);
-              router.push('/more');
-            }}
-          >
-            <Text style={styles.menuRowText}>More</Text>
-          </Pressable>
-          <Pressable style={styles.menuRowDanger} onPress={handleLogout}>
-            <Text style={styles.menuRowDangerText}>Log out</Text>
-          </Pressable>
-        </View>,
-      )}
+      <DealerMenuSheet visible={menuOpen} onClose={() => setMenuOpen(false)} />
 
       <Modal
         visible={notifOpen}
@@ -515,7 +440,7 @@ export default function DashboardScreen() {
                     </Text>
                   </View>
                   <Text style={styles.notifRowChevron}>›</Text>
-                </Pressable>
+        </Pressable>
 
                 {recentActivity.length === 0 ? (
                   <View style={[styles.notifRow, styles.notifRowLast]}>
@@ -545,9 +470,9 @@ export default function DashboardScreen() {
             </ScrollView>
             <Pressable style={styles.modalClose} onPress={() => setNotifOpen(false)}>
               <Text style={styles.modalCloseText}>Close</Text>
-            </Pressable>
+        </Pressable>
           </Animated.View>
-        </View>
+      </View>
       </Modal>
     </SafeAreaView>
   );
@@ -565,37 +490,6 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     minWidth: '100%',
   },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    backgroundColor: CARD,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E2E8F0',
-  },
-  iconHit: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconGlyph: { fontSize: 20 },
-  /** Red dot only (no SKU count) — inventory attention / unread digest without implying “N notifications”. */
-  bellUnreadDot: {
-    position: 'absolute',
-    top: 4,
-    right: 2,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#DC2626',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  logoText: { fontSize: 18, fontWeight: '800', color: SLATE },
-  logoAccent: { color: BRAND_ORANGE },
   greeting: { fontSize: 22, fontWeight: '700', color: SLATE, marginTop: 16 },
   greetingCompact: { marginTop: 12, fontSize: 21 },
   greetingSub: { fontSize: 14, color: MUTED, marginTop: 4, marginBottom: 16 },
@@ -778,10 +672,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginTop: 4,
   },
-  modalRoot: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
   notifModalRoot: {
     flex: 1,
   },
@@ -868,24 +758,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
     zIndex: 1,
   },
-  modalSheet: {
-    zIndex: 2,
-    backgroundColor: CARD,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    padding: 20,
-    paddingBottom: 28,
-    maxHeight: '85%',
-  },
-  modalTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 12,
-    flexWrap: 'wrap',
-  },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: SLATE, flexShrink: 1 },
   modalClose: {
     marginTop: 16,
     alignSelf: 'center',
@@ -893,13 +765,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   modalCloseText: { fontSize: 16, fontWeight: '700', color: BRAND_ORANGE },
-  menuBody: { gap: 4 },
-  menuRow: {
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#F1F5F9',
-  },
-  menuRowText: { fontSize: 16, fontWeight: '600', color: SLATE },
-  menuRowDanger: { paddingVertical: 16, marginTop: 8 },
-  menuRowDangerText: { fontSize: 16, fontWeight: '700', color: '#DC2626' },
 });

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { router } from 'expo-router';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DealerAppBar } from '../components/DealerAppBar';
+import { DealerMenuSheet } from '../components/DealerMenuSheet';
+import { DealerStackHeader } from '../components/DealerStackHeader';
 import { api } from '../lib/api';
 
 function actionColor(action) {
@@ -11,6 +13,7 @@ function actionColor(action) {
 }
 
 export default function ActivityScreen() {
+  const [menuOpen, setMenuOpen] = useState(false);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -37,17 +40,14 @@ export default function ActivityScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backHit} hitSlop={12}>
-          <Text style={styles.backText}>Back</Text>
-        </Pressable>
-        <Text style={styles.title}>Recent activity</Text>
-        <View style={styles.backHit} />
-      </View>
+      <DealerAppBar onMenuPress={() => setMenuOpen(true)} rightAction="search" />
+      <DealerMenuSheet visible={menuOpen} onClose={() => setMenuOpen(false)} />
+      <DealerStackHeader title="Recent activity" />
       <Text style={styles.sub}>Latest changes across your inventory.</Text>
       {loading ? <ActivityIndicator style={styles.loader} color="#EA580C" /> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <FlatList
+        style={styles.listFlex}
         data={items}
         keyExtractor={(item, index) => `${item.created_at || ''}-${index}`}
         contentContainerStyle={styles.listPad}
@@ -71,16 +71,7 @@ export default function ActivityScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F5F6FA' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  backHit: { minWidth: 56, minHeight: 44, justifyContent: 'center' },
-  backText: { color: '#EA580C', fontWeight: '700', fontSize: 16 },
-  title: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
+  listFlex: { flex: 1 },
   sub: { paddingHorizontal: 16, color: '#64748B', marginBottom: 8 },
   loader: { marginTop: 8 },
   error: { color: '#DC2626', paddingHorizontal: 16 },

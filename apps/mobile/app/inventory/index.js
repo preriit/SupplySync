@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DealerAppBar } from '../../components/DealerAppBar';
+import { DealerMenuSheet } from '../../components/DealerMenuSheet';
 import { DealerTabBar } from '../../components/DealerTabBar';
 import { api } from '../../lib/api';
 
@@ -19,6 +21,7 @@ function getStockLabel(subcategory) {
 }
 
 export default function InventoryScreen() {
+  const [menuOpen, setMenuOpen] = useState(false);
   const [subcategories, setSubcategories] = useState([]);
   const [loadingText, setLoadingText] = useState('Loading inventory...');
   const [error, setError] = useState('');
@@ -49,9 +52,10 @@ export default function InventoryScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>Inventory</Text>
-      </View>
+      <DealerAppBar onMenuPress={() => setMenuOpen(true)} rightAction="search" />
+      <DealerMenuSheet visible={menuOpen} onClose={() => setMenuOpen(false)} />
+      <View style={styles.page}>
+        <Text style={styles.pageTitle}>Inventory</Text>
 
       {loadingText ? <Text style={styles.loadingText}>{loadingText}</Text> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -78,15 +82,16 @@ export default function InventoryScreen() {
         )}
         ListEmptyComponent={!loadingText && !error ? <Text>No categories yet.</Text> : null}
       />
+      </View>
       <DealerTabBar current="inventory" />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F6FA', paddingHorizontal: 16 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 },
-  title: { fontSize: 24, fontWeight: '700', color: '#0F172A' },
+  container: { flex: 1, backgroundColor: '#F5F6FA' },
+  page: { flex: 1, paddingHorizontal: 16 },
+  pageTitle: { fontSize: 22, fontWeight: '800', color: '#0F172A', marginTop: 12, marginBottom: 8 },
   listFlex: { flex: 1 },
   listContent: { paddingTop: 16, paddingBottom: 100, gap: 12 },
   card: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 14, gap: 4 },

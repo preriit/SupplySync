@@ -2,9 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { router } from 'expo-router';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DealerAppBar } from '../components/DealerAppBar';
+import { DealerMenuSheet } from '../components/DealerMenuSheet';
+import { DealerStackHeader } from '../components/DealerStackHeader';
 import { api } from '../lib/api';
 
 export default function StockAlertsScreen() {
+  const [menuOpen, setMenuOpen] = useState(false);
   const [stockType, setStockType] = useState('low');
   const [groups, setGroups] = useState([]);
   const [totalProducts, setTotalProducts] = useState(0);
@@ -54,13 +58,9 @@ export default function StockAlertsScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backHit} hitSlop={12}>
-          <Text style={styles.backText}>Back</Text>
-        </Pressable>
-        <Text style={styles.title}>Stock alerts</Text>
-        <View style={styles.backHit} />
-      </View>
+      <DealerAppBar onMenuPress={() => setMenuOpen(true)} rightAction="search" />
+      <DealerMenuSheet visible={menuOpen} onClose={() => setMenuOpen(false)} />
+      <DealerStackHeader title="Stock alerts" />
       <View style={styles.toggleRow}>
         <Pressable
           style={[styles.toggle, stockType === 'low' && styles.toggleOn]}
@@ -81,6 +81,7 @@ export default function StockAlertsScreen() {
       {loading ? <ActivityIndicator style={styles.loader} color="#EA580C" /> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <FlatList
+        style={styles.list}
         data={rows}
         keyExtractor={(r) => r.key}
         contentContainerStyle={styles.listPad}
@@ -108,16 +109,7 @@ export default function StockAlertsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F5F6FA' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  backHit: { minWidth: 56, minHeight: 44, justifyContent: 'center' },
-  backText: { color: '#EA580C', fontWeight: '700', fontSize: 16 },
-  title: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
+  list: { flex: 1 },
   toggleRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginBottom: 8 },
   toggle: {
     flex: 1,
@@ -132,7 +124,7 @@ const styles = StyleSheet.create({
   countLine: { paddingHorizontal: 16, color: '#475569', marginBottom: 8 },
   loader: { marginTop: 8 },
   error: { color: '#DC2626', paddingHorizontal: 16 },
-  listPad: { padding: 16, paddingBottom: 32, gap: 10 },
+  listPad: { padding: 16, paddingBottom: 24, gap: 10 },
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,

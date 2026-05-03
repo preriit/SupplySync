@@ -48,7 +48,7 @@ Dealer home: **fast orientation**, **find product** (search), **jump to stock wo
 
 1. **Header** — menu control, brand, notifications (see below).  
 2. **Greeting** — personalized line + short subline (e.g. inventory snapshot tone).  
-3. **Search** — **single** affordance: full-width **search bar** (placeholder e.g. name / SKU / size); optional filter control on the bar if product discovery needs it. **There is no separate “Search Product” quick tile** — removed to avoid duplicating the bar.  
+3. **Search** — **single** affordance: full-width **search bar** (placeholder e.g. name / SKU / size). **Filter control on the bar** (reference layout: filter button beside the field) is **Phase 2** — tracked in Dashboard tracker **#12**; ship bar + Go first, then filters when discovery UX is defined. **There is no separate “Search Product” quick tile** — removed to avoid duplicating the bar.  
 4. **Quick actions** — **one horizontal row of three equal cards** (clean, scannable); tiles only for actions not duplicated elsewhere on this screen:  
    - **Add product** — inventory root (choose category, then add from product list).  
    - **Low stock** — stock alerts list (same logic as web / alerts; counts consistent with summary).  
@@ -70,12 +70,14 @@ Dealer home: **fast orientation**, **find product** (search), **jump to stock wo
 - **Intent:** **secondary and account** destinations — not a second copy of primary tabs.  
 - **Typical items:** profile / account, settings, team (if role allows and not in tabs), help or support link, **logout**.  
 - **Avoid:** repeating Dashboard, Inventory, or search here when those exist on the home layout or bottom tabs.
+- **Shipped implementation (`apps/mobile`, 2026-05-02):** Slide-out `DealerMenuSheet` mirrors web dealer sidebar **color** (`#0B1F3A` family, translucent pane over scrim). Each row has a **small Ionicons glyph** (same vocabulary as the bottom tab bar where relevant). Rows: **Dashboard**, **Inventory**, **Recent activity**, **Profile**, **Log out** (logout stays drawer-only). Some overlap with tabs is intentional for desktop parity and quick jumps from any screen.
 
 #### Bottom navigation
 
 - **Principle:** tabs are **real, frequent dealer destinations** only — no placeholder tabs.  
 - **Recommended set:** **Dashboard**, **Inventory**, optional dedicated **Alerts** / **Low stock** tab **if** it is a real screen distinct enough from Dashboard shortcut; **More** for settings, team, reports (only if shipped), logout, and any lower-frequency routes.  
 - **Orders / Reports:** include **only** when dealer-facing features exist in the build; otherwise omit from the bar and surface under **More** or ship later. Prefer **four strong tabs + More** over five tabs with stubs.
+- **Shipped implementation (2026-05-02):** `DealerTabBar` uses **four tabs — Dashboard, Inventory, Reports, Profile** (reports wired where dealer APIs exist). Low stock / activity remain dashboard shortcuts or pushed routes, not separate tab stubs. **More** tab screen removed in favor of **Profile** in the bar plus drawer for logout and activity.
 
 #### Wave 2 alignment
 
@@ -177,6 +179,7 @@ Use this **top to bottom** by screen. After each screen pass, tick boxes and add
 | 9 | **Bottom tabs:** no placeholder tabs; matches finalized tab policy. | [ ] |
 | 10 | **One-handed:** favor critical actions in the **lower half** where possible; avoid only top-corner reliance for main dealer tasks. | [ ] |
 | 11 | No duplicate paths that **disagree** with Inventory (counts, filters, naming). | [ ] |
+| 12 | **Phase 2 — Search bar filter:** Add the **filter** affordance on the dashboard search bar (match reference: control adjacent to search / Go). Scope behavior when implementing (sheet vs presets, parity with Inventory search filters, API). | [ ] |
 
 **Exit:** Dealer can use **search bar**, **Low Stock**, and **Add Product** without hunting; no redundant search or activity tiles.
 
@@ -260,5 +263,6 @@ Use this **top to bottom** by screen. After each screen pass, tick boxes and add
 |------|------|
 | 2026-05-02 | **Dashboard design locked** in *Finalized screen specifications*: search **bar only** (Search Product tile removed); **Recent Updates** quick tile removed; activity via **list + View all**; notifications, hamburger, bottom tabs, summary; quick actions as **one row of three cards** (Add product, Low stock, Browse inventory). |
 | 2026-05-02 | **Dashboard implemented** in `apps/mobile` (`dashboard.js`, `DealerTabBar`, `search`, `stock-alerts`, `activity`, `more`); inventory tab uses same bottom bar. Backend: `build_recent_activity_feed` + `GET /dealer/dashboard/recent-activity` for View all activity. |
+| 2026-05-02 | **Dealer shell:** `DealerAppBar`, `DealerStackHeader`, `DealerMenuSheet` (navy translucent drawer + row icons), `DealerTabBar` (four tabs, navy `#0B1F3A`, orange active). **Profile** and **Reports** screens; **More** removed; drawer carries **Log out**. Shared headers on dealer stacks (`dashboard`, `inventory`, `search`, `stock-alerts`, `activity`). |
 | _(add a line after each screen or session)_ | |
 
