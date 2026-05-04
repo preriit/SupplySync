@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -7,8 +8,11 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 import os
+from dotenv import load_dotenv
 from models import User
 from database import get_db
+
+load_dotenv(Path(__file__).parent / '.env')
 
 # Support both new bcrypt hashes and migrated Django PBKDF2 hashes.
 pwd_context = CryptContext(
@@ -19,6 +23,12 @@ security = HTTPBearer()
 
 JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get('ACCESS_TOKEN_EXPIRE_MINUTES', 43200))
+INSECURE_DEV_JWT_SECRET = 'dev-insecure-jwt-secret'
+
+
+def _is_truthy_env(name: str) -> bool:
+    value = os.environ.get(name)
+    return bool(value and value.strip().lower() in {'1', 'true', 'yes', 'on'})
 
 
 def _get_jwt_secret_key() -> str:
@@ -27,10 +37,13 @@ def _get_jwt_secret_key() -> str:
     if configured_key:
         return configured_key
 
-    app_env = os.environ.get('APP_ENV', 'development').strip().lower()
-    if app_env != 'production':
-        # Keep local/dev login functional even when backend/.env is missing.
-        return 'dev-insecure-jwt-secret'
+    app_env = os.environ.get('APP_ENV', '').strip().lower()
+    if (
+        _is_truthy_env('ALLOW_INSECURE_DEV_JWT')
+        and app_env in {'development', 'dev', 'local', 'test'}
+    ):
+        # Explicit local/test escape hatch only; never silently use this public key.
+        return INSECURE_DEV_JWT_SECRET
 
     raise RuntimeError('JWT_SECRET_KEY is not configured')
 
