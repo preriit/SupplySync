@@ -2561,11 +2561,13 @@ async def update_product(
     """Update an existing product"""
     require_inventory_write_access(current_user)
     
-    # Get product
+    # Lock the inventory row before calculating quantity deltas so concurrent
+    # stock adjustments cannot overwrite each other with stale quantities.
     product = db.query(Product).filter(
         Product.id == product_id,
-        Product.merchant_id == current_user.merchant_id
-    ).first()
+        Product.merchant_id == current_user.merchant_id,
+        Product.is_active == True
+    ).with_for_update().first()
     
     if not product:
         raise HTTPException(
@@ -2675,11 +2677,13 @@ async def delete_product(
     """Delete a product (soft delete by setting is_active to False)"""
     require_dealer_delete_access(current_user)
     
-    # Get product
+    # Lock the inventory row before calculating quantity deltas so concurrent
+    # stock adjustments cannot overwrite each other with stale quantities.
     product = db.query(Product).filter(
         Product.id == product_id,
-        Product.merchant_id == current_user.merchant_id
-    ).first()
+        Product.merchant_id == current_user.merchant_id,
+        Product.is_active == True
+    ).with_for_update().first()
     
     if not product:
         raise HTTPException(
@@ -2785,11 +2789,13 @@ async def create_product_transaction(
             detail="quantity must be a positive integer"
         )
     
-    # Get product
+    # Lock the inventory row before calculating quantity deltas so concurrent
+    # stock adjustments cannot overwrite each other with stale quantities.
     product = db.query(Product).filter(
         Product.id == product_id,
-        Product.merchant_id == current_user.merchant_id
-    ).first()
+        Product.merchant_id == current_user.merchant_id,
+        Product.is_active == True
+    ).with_for_update().first()
     
     if not product:
         raise HTTPException(
