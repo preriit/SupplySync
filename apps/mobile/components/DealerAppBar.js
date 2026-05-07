@@ -2,6 +2,8 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { FONT } from '../theme/typography';
+
 const SLATE = '#0F172A';
 const BRAND_ORANGE = '#EA580C';
 const CARD = '#FFFFFF';
@@ -75,6 +77,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: CARD,
   },
-  logo: { fontSize: 18, fontWeight: '800', color: SLATE },
+  logo: { fontSize: 18, fontFamily: FONT.bold, color: SLATE },
   logoAccent: { color: BRAND_ORANGE },
 });

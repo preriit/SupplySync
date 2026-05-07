@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../lib/api';
 import { secureStorage } from '../lib/storage';
+import { FONT } from '../theme/typography';
 
 function resolveLoginErrorMessage(error) {
   const detail = error?.response?.data?.detail;
@@ -103,7 +104,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: '700',
+    fontFamily: FONT.bold,
     color: '#F97316',
   },
   subtitle: {
@@ -126,7 +127,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontFamily: FONT.semibold,
   },
   error: {
     color: '#DC2626',

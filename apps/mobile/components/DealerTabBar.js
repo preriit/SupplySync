@@ -3,6 +3,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { FONT } from '../theme/typography';
+
 const BRAND_ORANGE = '#EA580C';
 /** Desktop dealer sidebar — DealerNav `bg-[#0B1F3A]`. */
 const NAVY_DEALER = '#0B1F3A';
@@ -110,7 +112,7 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: FONT.semibold,
     color: TAB_INACTIVE,
     letterSpacing: -0.1,
   },

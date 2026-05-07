@@ -24,6 +24,13 @@ SupplySync aims to provide a simple, reliable operating system for inventory pla
 - Fill rate (%)
 - Forecast error (MAPE or equivalent)
 - Aged inventory value
+- Daily boxes sold per dealer, segmented by size and key product attributes.
+
+## 5.1) Dealer Network Intelligence Direction
+- As more dealers onboard, track daily sold-box volume per dealer with size and attribute breakdowns.
+- Use this to compute regional moving averages and benchmark ranges.
+- Turn these benchmarks into practical dealer insights (for example: unusually high/low movement, stock mix gaps, and replenishment guidance).
+- Use benchmarking as decision support, not automated decision replacement.
 
 ## 6) Product Principles
 - Keep workflows practical and fast for non-technical operators.
@@ -43,3 +50,4 @@ SupplySync aims to provide a simple, reliable operating system for inventory pla
 
 ## 9) Revision Log
 - 2026-04-30: Initial version created.
+- 2026-05-05: Added dealer-level daily sales aggregation and regional benchmark insight direction.

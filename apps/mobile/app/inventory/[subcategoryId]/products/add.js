@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DealerBackButton } from '../../../../components/DealerBackButton';
 import { api } from '../../../../lib/api';
+import { FONT } from '../../../../theme/typography';
 
 const initialForm = {
   brand: '',
@@ -122,9 +124,7 @@ export default function AddProductScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable style={styles.linkButton} onPress={() => router.back()}>
-          <Text style={styles.linkButtonText}>Back</Text>
-        </Pressable>
+        <DealerBackButton />
         <Text style={styles.title}>Add Product</Text>
       </View>
 
@@ -180,13 +180,11 @@ export default function AddProductScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F6FA', padding: 16 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  title: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  title: { flex: 1, fontSize: 20, fontFamily: FONT.bold, color: '#0F172A', minWidth: 0 },
   content: { paddingTop: 16, paddingBottom: 24, gap: 12 },
-  linkButton: { backgroundColor: '#0F172A', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  linkButtonText: { color: '#FFFFFF', fontWeight: '600' },
   fieldGroup: { gap: 6 },
-  label: { color: '#0F172A', fontWeight: '600' },
+  label: { color: '#0F172A', fontFamily: FONT.semibold },
   input: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -201,8 +199,8 @@ const styles = StyleSheet.create({
   optionChip: { backgroundColor: '#FFFFFF', borderRadius: 999, borderWidth: 1, borderColor: '#CBD5E1', paddingHorizontal: 10, paddingVertical: 6 },
   optionChipActive: { borderColor: '#EA580C', backgroundColor: '#FFEDD5' },
   optionChipText: { color: '#334155', fontSize: 12 },
-  optionChipTextActive: { color: '#C2410C', fontWeight: '600' },
+  optionChipTextActive: { color: '#C2410C', fontFamily: FONT.semibold },
   saveButton: { marginTop: 8, backgroundColor: '#EA580C', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  saveButtonText: { color: '#FFFFFF', fontWeight: '700' },
+  saveButtonText: { color: '#FFFFFF', fontFamily: FONT.bold },
   errorText: { color: '#DC2626' },
 });

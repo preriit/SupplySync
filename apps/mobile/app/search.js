@@ -6,6 +6,7 @@ import { DealerAppBar } from '../components/DealerAppBar';
 import { DealerMenuSheet } from '../components/DealerMenuSheet';
 import { DealerStackHeader } from '../components/DealerStackHeader';
 import { api } from '../lib/api';
+import { FONT } from '../theme/typography';
 
 export default function SearchScreen() {
   const inputRef = useRef(null);
@@ -94,7 +95,11 @@ export default function SearchScreen() {
             return (
               <Pressable
                 style={styles.card}
-                onPress={() => router.push(`/inventory/${s.id}/products`)}
+                onPress={() =>
+                  router.push(
+                    `/inventory/${s.id}/products?subcategoryName=${encodeURIComponent(s.name || '')}`,
+                  )
+                }
               >
                 <Text style={styles.cardTag}>Category</Text>
                 <Text style={styles.cardTitle}>{s.name}</Text>
@@ -108,7 +113,12 @@ export default function SearchScreen() {
           return (
             <Pressable
               style={styles.card}
-              onPress={() => router.push(`/inventory/${p.subcategory_id}/products/${p.id}`)}
+              onPress={() => {
+                const label = `${(p.brand || '').trim()} ${(p.name || '').trim()}`.trim() || (p.name || '');
+                router.push(
+                  `/inventory/${p.subcategory_id}/products/${p.id}?productName=${encodeURIComponent(label)}`,
+                );
+              }}
             >
               <Text style={styles.cardTag}>Product</Text>
               <Text style={styles.cardTitle}>
@@ -147,7 +157,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 44,
   },
-  goBtnText: { color: '#FFFFFF', fontWeight: '700' },
+  goBtnText: { color: '#FFFFFF', fontFamily: FONT.bold },
   loader: { marginTop: 12 },
   error: { color: '#DC2626', paddingHorizontal: 16, marginBottom: 8 },
   listPad: { padding: 16, paddingBottom: 32, gap: 10 },
@@ -158,8 +168,8 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#E2E8F0',
   },
-  cardTag: { fontSize: 11, fontWeight: '700', color: '#EA580C', textTransform: 'uppercase', marginBottom: 4 },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
+  cardTag: { fontSize: 11, fontFamily: FONT.bold, color: '#EA580C', textTransform: 'uppercase', marginBottom: 4 },
+  cardTitle: { fontSize: 16, fontFamily: FONT.bold, color: '#0F172A' },
   cardMeta: { fontSize: 14, color: '#64748B', marginTop: 4 },
   empty: { textAlign: 'center', color: '#64748B', marginTop: 24 },
 });

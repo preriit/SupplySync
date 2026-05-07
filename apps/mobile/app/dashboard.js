@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { createAuthHelpers, createSessionManager } from '@supplysync/core';
 import {
   ActivityIndicator,
@@ -19,14 +20,27 @@ import { DealerAppBar } from '../components/DealerAppBar';
 import { DealerMenuSheet } from '../components/DealerMenuSheet';
 import { DealerTabBar } from '../components/DealerTabBar';
 import { api } from '../lib/api';
-import { buildDashboardAlertDigest, DASHBOARD_ALERT_DIGEST_KEY } from '../lib/dashboardAlertDigest';
+import {
+  buildActivitySignature,
+  DASHBOARD_ACTIVITY_ACK_KEY,
+  DASHBOARD_ALERT_DIGEST_KEY,
+  migrateLegacyAlertDigestToActivityAck,
+} from '../lib/dashboardAlertDigest';
 import { secureStorage } from '../lib/storage';
+import { FONT } from '../theme/typography';
 
 const BRAND_ORANGE = '#EA580C';
 const SLATE = '#0F172A';
 const MUTED = '#64748B';
 const PAGE_BG = '#F5F6FA';
 const CARD = '#FFFFFF';
+
+/** Notifications pane — slate-tinted mist (reads gray vs plain white). */
+const NOTIF_PANE_SURFACE = 'rgba(241, 245, 249, 0.96)';
+const NOTIF_SCRIM = 'rgba(15, 23, 42, 0.3)';
+const NOTIF_ROW_DIVIDER = '#E2E8F0';
+const NOTIF_BORDER_EDGE = 'rgba(15, 23, 42, 0.12)';
+const NOTIF_CHEVRON_SIZE = 20;
 
 /** Compact phones: fewer activity lines + shorter scroll; tablets / tall: more preview rows. */
 function useActivityPreviewRows() {
@@ -42,8 +56,9 @@ function useActivityPreviewRows() {
 
 export default function DashboardScreen() {
   const activityPreviewRows = useActivityPreviewRows();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const notifPaneWidth = Math.round(windowWidth * 0.8);
   const notifAnim = useRef(new Animated.Value(0)).current;
   const [userName, setUserName] = useState('Dealer');
   const [stats, setStats] = useState(null);
@@ -52,8 +67,8 @@ export default function DashboardScreen() {
   const [searchDraft, setSearchDraft] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  /** Last digest the user acknowledged with "Mark all as read" (loaded from secure storage). */
-  const [seenAlertDigest, setSeenAlertDigest] = useState('');
+  /** Last activity snapshot acknowledged via Clear all (stock alerts are not cleared here). */
+  const [seenActivityAck, setSeenActivityAck] = useState('');
   const [alertDigestReady, setAlertDigestReady] = useState(false);
 
   const dealerSessionManager = useMemo(() => createSessionManager(secureStorage), []);
@@ -72,8 +87,9 @@ export default function DashboardScreen() {
     }
   }, []);
 
-  const currentAlertDigest = useMemo(() => buildDashboardAlertDigest(stats), [stats]);
-  const hasUnreadAlerts = alertDigestReady && currentAlertDigest !== seenAlertDigest;
+  const currentActivitySig = useMemo(() => buildActivitySignature(stats), [stats]);
+  const hasActivityUnread =
+    alertDigestReady && currentActivitySig !== seenActivityAck;
 
   useEffect(() => {
     if (!stats) {
@@ -83,11 +99,21 @@ export default function DashboardScreen() {
     let cancelled = false;
     setAlertDigestReady(false);
     (async () => {
-      const stored = await secureStorage.getItem(DASHBOARD_ALERT_DIGEST_KEY);
+      let ack = await secureStorage.getItem(DASHBOARD_ACTIVITY_ACK_KEY);
+      if (ack == null) {
+        const legacy = await secureStorage.getItem(DASHBOARD_ALERT_DIGEST_KEY);
+        if (legacy) {
+          ack = migrateLegacyAlertDigestToActivityAck(legacy);
+          await secureStorage.setItem(DASHBOARD_ACTIVITY_ACK_KEY, ack);
+          await secureStorage.removeItem(DASHBOARD_ALERT_DIGEST_KEY);
+        } else {
+          ack = '';
+        }
+      }
       if (cancelled) {
         return;
       }
-      setSeenAlertDigest(stored ?? '');
+      setSeenActivityAck(typeof ack === 'string' ? ack : '');
       setAlertDigestReady(true);
     })();
     return () => {
@@ -139,13 +165,22 @@ export default function DashboardScreen() {
   const updatesToday = Number(stats?.inventory_transactions_today ?? 0);
   const recentActivity = stats?.recent_activity || [];
 
-  const markAllAlertsRead = async () => {
+  /** Bell: stock attention OR unacknowledged activity updates. */
+  const hasUnreadAlerts =
+    alertDigestReady && (attentionSkus > 0 || hasActivityUnread);
+  /** Clears recent inventory lines only; stock row and SKU counts unchanged. */
+  const canClearActivityNotifications =
+    Boolean(stats) && alertDigestReady && hasActivityUnread;
+
+  const showActivityNotificationRows = hasActivityUnread && recentActivity.length > 0;
+
+  const markActivityNotificationsClear = async () => {
     if (!stats) {
       return;
     }
-    const digest = buildDashboardAlertDigest(stats);
-    await secureStorage.setItem(DASHBOARD_ALERT_DIGEST_KEY, digest);
-    setSeenAlertDigest(digest);
+    const sig = buildActivitySignature(stats);
+    await secureStorage.setItem(DASHBOARD_ACTIVITY_ACK_KEY, sig);
+    setSeenActivityAck(sig);
   };
 
   const openSearchResults = () => {
@@ -355,28 +390,18 @@ export default function DashboardScreen() {
             style={[
               styles.notifPopover,
               {
-                top: insets.top + 48,
-                right: 8,
-                width: Math.min(windowWidth - 24, 360),
-                maxHeight: windowHeight * 0.72,
+                width: notifPaneWidth,
+                top: 0,
+                bottom: 0,
+                right: 0,
+                paddingTop: insets.top + 8,
+                paddingBottom: Math.max(insets.bottom, 16),
                 opacity: notifAnim,
                 transform: [
                   {
-                    translateY: notifAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-12, 0],
-                    }),
-                  },
-                  {
                     translateX: notifAnim.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [14, 0],
-                    }),
-                  },
-                  {
-                    scale: notifAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.94, 1],
+                      outputRange: [notifPaneWidth, 0],
                     }),
                   },
                 ],
@@ -385,41 +410,30 @@ export default function DashboardScreen() {
           >
             <View style={styles.notifHeaderRow}>
               <Text style={styles.notifHeaderTitle}>Notifications</Text>
-              <Pressable
-                onPress={() => {
-                  markAllAlertsRead();
-                }}
-                disabled={!stats || !hasUnreadAlerts}
-                accessibilityRole="button"
-                accessibilityLabel="Clear all"
-                accessibilityHint="Clears the unread dot on the bell. Does not change inventory."
-                hitSlop={8}
-              >
-                <Text
-                  style={[
-                    styles.notifClearAll,
-                    (!stats || !hasUnreadAlerts) && styles.notifClearAllDisabled,
-                  ]}
+              {canClearActivityNotifications ? (
+                <Pressable
+                  onPress={() => {
+                    markActivityNotificationsClear();
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear all"
+                  accessibilityHint="Clears recent inventory updates from this list. Stock alerts are unchanged."
+                  hitSlop={8}
                 >
-                  Clear all
-                </Text>
-              </Pressable>
+                  <Text style={styles.notifClearAll}>Clear all</Text>
+                </Pressable>
+              ) : null}
             </View>
             <ScrollView
-              style={[
-                styles.notifPopoverScroll,
-                { maxHeight: Math.max(180, windowHeight * 0.72 - 148) },
-              ]}
+              style={styles.notifPopoverScroll}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
               nestedScrollEnabled
+              contentContainerStyle={styles.notifPopoverScrollContent}
             >
-              <View style={styles.notifList}>
+              <>
                 <Pressable
-                  style={[
-                    styles.notifRow,
-                    attentionSkus > 0 ? styles.notifRowAlert : styles.notifRowNeutral,
-                  ]}
+                  style={styles.notifRow}
                   onPress={() => {
                     setNotifOpen(false);
                     router.push('/stock-alerts');
@@ -432,21 +446,41 @@ export default function DashboardScreen() {
                   }
                 >
                   <View style={styles.notifRowBody}>
-                    <Text style={styles.notifRowTitle}>Stock alerts</Text>
+                    <View style={styles.notifStockTitleRow}>
+                      <Text
+                        style={[
+                          styles.notifRowTitle,
+                          styles.notifStockTitleText,
+                          attentionSkus > 0 && styles.notifRowTitleUrgent,
+                        ]}
+                      >
+                        Stock alerts
+                      </Text>
+                      {attentionSkus > 0 ? (
+                        <View style={styles.notifAttentionBadge}>
+                          <Text style={styles.notifAttentionBadgeText}>Needs attention</Text>
+                        </View>
+                      ) : null}
+                    </View>
                     <Text style={styles.notifRowMeta}>
                       {attentionSkus > 0
                         ? `${attentionSkus} SKU${attentionSkus === 1 ? '' : 's'} low or out of stock`
                         : 'No SKUs need attention right now'}
                     </Text>
                   </View>
-                  <Text style={styles.notifRowChevron}>›</Text>
-        </Pressable>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={NOTIF_CHEVRON_SIZE}
+                    color={attentionSkus > 0 ? BRAND_ORANGE : MUTED}
+                  />
+                </Pressable>
 
                 {recentActivity.length === 0 ? (
                   <View style={[styles.notifRow, styles.notifRowLast]}>
                     <Text style={styles.notifRowEmpty}>No recent inventory updates yet.</Text>
                   </View>
                 ) : (
+                  showActivityNotificationRows &&
                   recentActivity.map((row, idx) => (
                     <View
                       key={`n-${row.created_at || idx}-${idx}`}
@@ -466,11 +500,8 @@ export default function DashboardScreen() {
                     </View>
                   ))
                 )}
-              </View>
+              </>
             </ScrollView>
-            <Pressable style={styles.modalClose} onPress={() => setNotifOpen(false)}>
-              <Text style={styles.modalCloseText}>Close</Text>
-        </Pressable>
           </Animated.View>
       </View>
       </Modal>
@@ -490,7 +521,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     minWidth: '100%',
   },
-  greeting: { fontSize: 22, fontWeight: '700', color: SLATE, marginTop: 16 },
+  greeting: { fontSize: 22, fontFamily: FONT.bold, color: SLATE, marginTop: 16 },
   greetingCompact: { marginTop: 12, fontSize: 21 },
   greetingSub: { fontSize: 14, color: MUTED, marginTop: 4, marginBottom: 16 },
   greetingSubCompact: { marginBottom: 10 },
@@ -540,7 +571,7 @@ const styles = StyleSheet.create({
     minHeight: 40,
     justifyContent: 'center',
   },
-  searchGoText: { color: '#FFFFFF', fontWeight: '700' },
+  searchGoText: { color: '#FFFFFF', fontFamily: FONT.bold },
   /** One row, three equal quick actions (Wave 2 — dense, scannable). */
   quickRow: {
     flexDirection: 'row',
@@ -575,7 +606,7 @@ const styles = StyleSheet.create({
   quickTileIcon: { fontSize: 22, marginBottom: 8, color: SLATE },
   quickTileTitle: {
     fontSize: 13,
-    fontWeight: '800',
+    fontFamily: FONT.bold,
     color: SLATE,
     textAlign: 'center',
     lineHeight: 16,
@@ -597,9 +628,9 @@ const styles = StyleSheet.create({
   },
   sectionHeaderInPrimary: { marginTop: 14 },
   sectionHeaderLeft: { flex: 1 },
-  sectionTitle: { fontSize: 16, fontWeight: '800', color: SLATE },
+  sectionTitle: { fontSize: 16, fontFamily: FONT.bold, color: SLATE },
   sectionSub: { fontSize: 13, color: MUTED, marginTop: 2 },
-  sectionLink: { fontSize: 14, fontWeight: '700', color: BRAND_ORANGE },
+  sectionLink: { fontSize: 14, fontFamily: FONT.bold, color: BRAND_ORANGE },
   summaryCard: {
     flexDirection: 'row',
     backgroundColor: '#F8FAFC',
@@ -610,9 +641,9 @@ const styles = StyleSheet.create({
   },
   summaryCell: { flex: 1, alignItems: 'center' },
   summaryDivider: { width: StyleSheet.hairlineWidth, backgroundColor: '#E2E8F0' },
-  summaryValue: { fontSize: 20, fontWeight: '800', color: SLATE },
+  summaryValue: { fontSize: 20, fontFamily: FONT.bold, color: SLATE },
   summaryValueAlert: { color: '#DC2626' },
-  summaryLabel: { fontSize: 12, color: MUTED, marginTop: 4, fontWeight: '600' },
+  summaryLabel: { fontSize: 12, color: MUTED, marginTop: 4, fontFamily: FONT.semibold },
   activityCardHeader: {
     paddingHorizontal: 12,
     paddingTop: 2,
@@ -638,7 +669,7 @@ const styles = StyleSheet.create({
   },
   activityViewAllText: {
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: FONT.bold,
     color: BRAND_ORANGE,
   },
   activityCardLoading: { paddingVertical: 24 },
@@ -662,7 +693,7 @@ const styles = StyleSheet.create({
   },
   activityRowBody: { flex: 1, minWidth: 0 },
   activityDot: { width: 10, height: 10, borderRadius: 5, marginTop: 5 },
-  activityTitle: { fontSize: 14, fontWeight: '600', color: SLATE, lineHeight: 20 },
+  activityTitle: { fontSize: 14, fontFamily: FONT.semibold, color: SLATE, lineHeight: 20 },
   activityMeta: { fontSize: 12, color: MUTED, marginTop: 4 },
   errorBanner: {
     backgroundColor: '#FEF2F2',
@@ -678,25 +709,33 @@ const styles = StyleSheet.create({
   notifPopover: {
     position: 'absolute',
     zIndex: 2,
-    backgroundColor: CARD,
-    borderRadius: 16,
-    padding: 20,
-    paddingBottom: 16,
+    flexDirection: 'column',
+    backgroundColor: NOTIF_PANE_SURFACE,
+    paddingHorizontal: 18,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: NOTIF_BORDER_EDGE,
+    overflow: 'hidden',
     ...Platform.select({
       ios: {
         shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.22,
-        shadowRadius: 20,
+        shadowOffset: { width: -4, height: 0 },
+        shadowOpacity: 0.12,
+        shadowRadius: 16,
       },
       android: { elevation: 14 },
       default: {},
     }),
   },
   notifPopoverScroll: {
-    flexGrow: 0,
-    flexShrink: 1,
+    flex: 1,
     marginTop: 4,
+    minHeight: 0,
+  },
+  notifPopoverScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 20,
   },
   notifHeaderRow: {
     flexDirection: 'row',
@@ -704,65 +743,72 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
     paddingBottom: 14,
-    marginBottom: 4,
+    marginBottom: 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: NOTIF_ROW_DIVIDER,
   },
-  notifHeaderTitle: { fontSize: 17, fontWeight: '800', color: SLATE, flexShrink: 1 },
-  notifClearAll: { fontSize: 15, fontWeight: '700', color: BRAND_ORANGE },
-  notifClearAllDisabled: { color: '#CBD5E1', fontWeight: '600' },
-  notifList: {
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E2E8F0',
-    overflow: 'hidden',
-    backgroundColor: '#F8FAFC',
-  },
+  notifHeaderTitle: { fontSize: 17, fontFamily: FONT.bold, color: SLATE, flexShrink: 1 },
+  notifClearAll: { fontSize: 15, fontFamily: FONT.semibold, color: BRAND_ORANGE },
   notifRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
+    paddingLeft: 0,
+    paddingRight: 14,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E8EDF3',
-    backgroundColor: CARD,
+    borderBottomColor: NOTIF_ROW_DIVIDER,
     gap: 10,
   },
   notifRowLast: {
     borderBottomWidth: 0,
   },
-  notifRowAlert: {
-    backgroundColor: '#FFF7ED',
-  },
-  notifRowNeutral: {
-    backgroundColor: '#F8FAFC',
-  },
   notifRowBody: { flex: 1, minWidth: 0 },
-  notifRowTitle: { fontSize: 14, fontWeight: '700', color: SLATE, lineHeight: 20 },
-  notifRowMeta: { fontSize: 12, color: MUTED, marginTop: 4, lineHeight: 16 },
-  notifRowChevron: {
-    fontSize: 22,
-    fontWeight: '300',
-    color: '#94A3B8',
-    marginTop: -2,
+  notifStockTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    rowGap: 6,
   },
+  /** Avoid flex shrink so glyphs (e.g. leading “S”) are not clipped beside the badge. */
+  notifStockTitleText: {
+    flexShrink: 0,
+    paddingRight: 2,
+  },
+  notifRowTitle: {
+    fontSize: 14,
+    fontFamily: FONT.semibold,
+    color: SLATE,
+    lineHeight: 20,
+  },
+  notifRowTitleUrgent: {
+    color: BRAND_ORANGE,
+  },
+  notifAttentionBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: 'rgba(234, 88, 12, 0.14)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(234, 88, 12, 0.35)',
+  },
+  notifAttentionBadgeText: {
+    fontSize: 11,
+    fontFamily: FONT.semibold,
+    color: BRAND_ORANGE,
+    letterSpacing: -0.2,
+  },
+  notifRowMeta: { fontSize: 12, color: MUTED, marginTop: 4, lineHeight: 16 },
   notifRowEmpty: {
     fontSize: 14,
     color: MUTED,
     textAlign: 'center',
     lineHeight: 20,
-    paddingVertical: 6,
+    paddingVertical: 10,
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    backgroundColor: NOTIF_SCRIM,
     zIndex: 1,
   },
-  modalClose: {
-    marginTop: 16,
-    alignSelf: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-  },
-  modalCloseText: { fontSize: 16, fontWeight: '700', color: BRAND_ORANGE },
 });

@@ -4,12 +4,13 @@ This folder is the new mobile application target for Android and iOS using Expo 
 
 ## Current status
 - Expo app in `app/` with shared `@supplysync/core` auth/API patterns
+- **Typography:** **Inter** (400–700) loaded in `app/_layout.js` via `@expo-google-fonts/inter`; defaults applied to `Text` / `TextInput`; weighted styles use `FONT` from `theme/typography.js` (required on Android instead of `fontWeight` alone). Ladder: `frontend/public/DESIGN_SYSTEM.md`.
 - Dealer experience: **`DealerTabBar`** (Dashboard, Inventory, Reports, Profile — navy `#0B1F3A`, orange active state), **`DealerMenuSheet`** (left drawer, same navy family, Ionicons beside rows, Log out), **`DealerAppBar`** / **`DealerStackHeader`** for consistent top chrome
 - Web app remains in `frontend`
 
 ## Planned next actions
 1. Continue Wave 2 items from `docs/MOBILE_UX_WAVE2.md` (inventory cards, product detail sticky actions, stock sheet polish)
-2. Optional: consolidate duplicated theme hex values into a single theme module (`DESIGN_SYSTEM` parity)
+2. Optional: consolidate color/spacing tokens into `theme/` alongside typography (`DESIGN_SYSTEM` parity)
 
 ## Local Networking Standard (Practical Setup)
 

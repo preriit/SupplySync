@@ -939,6 +939,9 @@ const ProductsList = () => {
               {historyProduct?.brand} - {historyProduct?.name}
               <br />
               Current Quantity: {historyProduct?.current_quantity} boxes
+              <span className="block text-xs mt-1 text-muted-foreground">
+                Last 90 days of transactions.
+              </span>
             </DialogDescription>
           </DialogHeader>
           

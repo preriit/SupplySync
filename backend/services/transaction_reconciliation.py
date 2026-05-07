@@ -3,8 +3,32 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
+
+# Default window for product transaction history in dealer UI and API responses.
+PUBLIC_TRANSACTION_HISTORY_DAYS = 90
+
+
+def utc_transaction_window_start(*, days: int | None = None) -> datetime:
+    n = PUBLIC_TRANSACTION_HISTORY_DAYS if days is None else days
+    return datetime.now(timezone.utc) - timedelta(days=n)
+
+
+def txn_created_at_utc(txn: Any) -> datetime | None:
+    created_at = getattr(txn, "created_at", None)
+    if created_at is None:
+        return None
+    if created_at.tzinfo is None:
+        return created_at.replace(tzinfo=timezone.utc)
+    return created_at.astimezone(timezone.utc)
+
+
+def txn_in_public_history_window(txn: Any, since: datetime) -> bool:
+    ts = txn_created_at_utc(txn)
+    if ts is None:
+        return False
+    return ts >= since
 
 
 OPENING_BALANCE_NOTE = "MIGRATION_OPENING_BALANCE_AUTO"
@@ -43,7 +67,7 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 
 def _sort_key(txn: Any) -> tuple[datetime, str]:
-    created_at = getattr(txn, "created_at", None) or datetime.min
+    created_at = txn_created_at_utc(txn) or datetime.min.replace(tzinfo=timezone.utc)
     return created_at, str(getattr(txn, "id", ""))
 
 

@@ -102,6 +102,7 @@ const SubCategoriesList = () => {
   };
 
   // Small visual status helps users prioritize categories before drilling in.
+  // Low stock when average boxes per product in the subcategory is below 20.
   const getStockStatus = (subcategory) => {
     if (subcategory.product_count === 0) {
       return { label: 'No products', tone: 'neutral' };
@@ -109,7 +110,10 @@ const SubCategoriesList = () => {
     if (subcategory.total_quantity === 0) {
       return { label: 'Out of stock', tone: 'danger' };
     }
-    if (subcategory.total_quantity < 20) {
+    const count = Number(subcategory.product_count) || 0;
+    const total = Number(subcategory.total_quantity) || 0;
+    const avgPerProduct = count > 0 ? total / count : 0;
+    if (avgPerProduct < 20) {
       return { label: 'Low stock', tone: 'warning' };
     }
     return { label: 'Healthy', tone: 'success' };

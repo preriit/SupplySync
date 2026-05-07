@@ -17,6 +17,8 @@ This roadmap is intentionally lightweight. Reprioritize weekly based on user fee
 - Progress to parity wave 2 (next highest-value dealer/admin workflows).
 - Continue hardening CI and release discipline as test coverage grows.
 - Mobile UX direction: see `docs/MOBILE_UX_WAVE2.md`.
+- Adaptive dealer report logic and API behavior contract: see `docs/contracts/RPT-ADAPT_adaptive-dealer-reports.md`.
+- Transaction history window and Phase 2 export plan: see `docs/TRANSACTION_HISTORY_POLICY.md`.
 
 ### Why this matters (plain terms)
 - We can now build many features once in shared code, instead of rewriting logic per platform.

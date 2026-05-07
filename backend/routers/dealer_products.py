@@ -29,7 +29,13 @@ from services.product_snapshots import (
     snapshot_labels_for_new_product,
 )
 from services.subcategory_defaults import resolve_dealer_subcategory_defaults
-from services.transaction_reconciliation import analyze_product_transactions
+from services.transaction_reconciliation import (
+    analyze_product_transactions,
+    PUBLIC_TRANSACTION_HISTORY_DAYS,
+    utc_transaction_window_start,
+    txn_created_at_utc,
+    txn_in_public_history_window,
+)
 
 router = APIRouter(prefix="/dealer", tags=["dealer"])
 
@@ -612,7 +618,6 @@ async def get_product_transactions(
     product_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    limit: int = 50,
     normalized: bool = False,
 ):
     if current_user.user_type != "dealer":
@@ -635,17 +640,39 @@ async def get_product_transactions(
             detail="Product not found",
         )
 
-    transactions = (
-        db.query(ProductTransaction)
-        .filter(ProductTransaction.product_id == product_id)
-        .order_by(ProductTransaction.created_at.desc())
-        .limit(limit)
-        .all()
+    since = utc_transaction_window_start()
+    base_q = db.query(ProductTransaction).filter(ProductTransaction.product_id == product_id)
+    has_older_transactions = (
+        db.query(ProductTransaction.id)
+        .filter(
+            ProductTransaction.product_id == product_id,
+            ProductTransaction.created_at < since,
+        )
+        .first()
+        is not None
     )
 
+    if normalized:
+        all_txns = base_q.order_by(ProductTransaction.created_at.asc()).all()
+        review = analyze_product_transactions(all_txns, int(product.current_quantity or 0))
+        review_by_id = {row.txn_id: row for row in review.rows}
+        transactions = [t for t in all_txns if txn_in_public_history_window(t, since)]
+
+        def _txn_sort_ts(t):
+            ts = txn_created_at_utc(t)
+            return ts.timestamp() if ts else 0.0
+
+        transactions.sort(key=_txn_sort_ts, reverse=True)
+    else:
+        review = None
+        review_by_id = {}
+        transactions = (
+            base_q.filter(ProductTransaction.created_at >= since)
+            .order_by(ProductTransaction.created_at.desc())
+            .all()
+        )
+
     transaction_list = []
-    review = analyze_product_transactions(transactions, product.current_quantity or 0) if normalized else None
-    review_by_id = {row.txn_id: row for row in review.rows} if review else {}
     for txn in transactions:
         user = db.query(User).filter(User.id == txn.user_id).first()
         normalized_row = review_by_id.get(str(txn.id))
@@ -675,6 +702,8 @@ async def get_product_transactions(
         },
         "transactions": transaction_list,
         "total_count": len(transaction_list),
+        "history_window_days": PUBLIC_TRANSACTION_HISTORY_DAYS,
+        "has_older_transactions": has_older_transactions,
         "normalized": normalized,
         "normalized_opening_balance": review.opening_balance if review else None,
         "normalized_baseline_opening_balance": review.baseline_opening_balance if review else None,

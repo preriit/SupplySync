@@ -8,8 +8,8 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Public Sans', 'system-ui', 'sans-serif'],
-        display: ['Manrope', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Inter', 'system-ui', 'sans-serif'],
       },
       colors: {
         // Existing palette aliases retained for compatibility with current pages.

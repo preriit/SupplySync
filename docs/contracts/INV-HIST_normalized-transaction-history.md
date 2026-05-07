@@ -66,6 +66,8 @@
 - Method: GET
 - Path: `/dealer/products/{product_id}/transactions`
 - Auth: dealer/manager token, merchant-scoped
+- History window: returns **all transactions in the last 90 calendar days** (no row-count cap inside the window). When `normalized=true`, the server still reads the **full** ledger for reconciliation, but `transactions` in the response remains the 90-day window only.
+- Response metadata: `history_window_days` (90), `has_older_transactions` (boolean).
 
 ### Request shape
 
@@ -90,6 +92,8 @@
       "created_by": "user@example.com"
     }
   ],
+  "history_window_days": 90,
+  "has_older_transactions": false,
   "normalized_reconciliation_gap": 0
 }
 ```

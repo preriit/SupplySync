@@ -645,6 +645,9 @@ const ProductDetail = () => {
             <DialogTitle>Product History & Activity</DialogTitle>
             <DialogDescription>
               {product.brand} - {product.name}
+              <span className="block text-xs mt-1 text-muted-foreground">
+                Stock transactions shown: last 90 days.
+              </span>
             </DialogDescription>
           </DialogHeader>
           

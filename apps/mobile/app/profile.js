@@ -23,6 +23,7 @@ import { DealerMenuSheet } from '../components/DealerMenuSheet';
 import { DealerTabBar } from '../components/DealerTabBar';
 import { api } from '../lib/api';
 import { secureStorage } from '../lib/storage';
+import { FONT } from '../theme/typography';
 
 const BRAND_ORANGE = '#EA580C';
 const SLATE = '#0F172A';
@@ -335,7 +336,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 120,
   },
-  screenTitle: { fontSize: 22, fontWeight: '800', color: SLATE },
+  screenTitle: { fontSize: 22, fontFamily: FONT.bold, color: SLATE },
   screenSub: { fontSize: 14, color: MUTED, marginTop: 4, marginBottom: 16 },
   card: {
     backgroundColor: CARD,
@@ -345,7 +346,7 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     gap: 4,
   },
-  cardTitle: { fontSize: 17, fontWeight: '800', color: SLATE, marginBottom: 12 },
+  cardTitle: { fontSize: 17, fontFamily: FONT.bold, color: SLATE, marginBottom: 12 },
   loader: { marginVertical: 24 },
   banner: {
     padding: 12,
@@ -360,7 +361,7 @@ const styles = StyleSheet.create({
   field: { marginBottom: 14 },
   fieldLabel: {
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: FONT.semibold,
     color: SLATE,
     marginBottom: 6,
   },
@@ -392,7 +393,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   langChipOn: { backgroundColor: '#FFF7ED' },
-  langChipText: { fontWeight: '600', color: '#64748B', fontSize: 15 },
+  langChipText: { fontFamily: FONT.semibold, color: '#64748B', fontSize: 15 },
   langChipTextOn: { color: '#C2410C' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 },
   primaryBtn: {
@@ -404,7 +405,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btnDisabled: { opacity: 0.65 },
-  primaryBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+  primaryBtnText: { color: '#FFFFFF', fontFamily: FONT.bold, fontSize: 16 },
   secondaryBtn: {
     borderRadius: 12,
     paddingVertical: 14,
@@ -413,7 +414,7 @@ const styles = StyleSheet.create({
     borderColor: '#CBD5E1',
     alignItems: 'center',
   },
-  secondaryBtnText: { color: SLATE, fontWeight: '700', fontSize: 16 },
+  secondaryBtnText: { color: SLATE, fontFamily: FONT.bold, fontSize: 16 },
   logout: {
     marginTop: 24,
     backgroundColor: SLATE,
@@ -421,5 +422,5 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
-  logoutText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+  logoutText: { color: '#FFFFFF', fontFamily: FONT.bold, fontSize: 16 },
 });

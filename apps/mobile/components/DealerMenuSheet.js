@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { createSessionManager } from '@supplysync/core';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { secureStorage } from '../lib/storage';
+import { FONT } from '../theme/typography';
 
 /** Matches desktop dealer sidebar (`DealerNav`: bg `#0B1F3A`). */
 const NAVY_BASE = '11, 31, 58';
@@ -32,6 +33,22 @@ export function DealerMenuSheet({ visible, onClose }) {
   const { width: windowWidth } = useWindowDimensions();
   const paneWidth = Math.round(windowWidth * 0.8);
   const menuAnim = useRef(new Animated.Value(0)).current;
+  const dealerSessionManager = useMemo(() => createSessionManager(secureStorage), []);
+  const [canManageTeam, setCanManageTeam] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    (async () => {
+      const user = await dealerSessionManager.getUser('dealer');
+      if (!cancelled) {
+        setCanManageTeam(user?.user_type === 'dealer');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, dealerSessionManager]);
 
   useEffect(() => {
     if (!visible) {
@@ -49,7 +66,6 @@ export function DealerMenuSheet({ visible, onClose }) {
 
   const logout = async () => {
     onClose();
-    const dealerSessionManager = createSessionManager(secureStorage);
     await dealerSessionManager.clearSession('dealer');
     router.replace('/login');
   };
@@ -107,6 +123,20 @@ export function DealerMenuSheet({ visible, onClose }) {
                 <Ionicons name="cube-outline" size={MENU_ICON_SIZE} color={MENU_ICON_MUTED} />
                 <Text style={styles.menuRowText}>Inventory</Text>
               </Pressable>
+              {canManageTeam ? (
+                <Pressable
+                  style={styles.menuRow}
+                  onPress={() => {
+                    onClose();
+                    router.push('/team-members');
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Team members"
+                >
+                  <Ionicons name="people-outline" size={MENU_ICON_SIZE} color={MENU_ICON_MUTED} />
+                  <Text style={styles.menuRowText}>Team Members</Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 style={styles.menuRow}
                 onPress={() => {
@@ -198,13 +228,13 @@ const styles = StyleSheet.create({
   menuRowLast: {
     borderBottomWidth: 0,
   },
-  menuRowText: { fontSize: 17, fontWeight: '600', color: MENU_TEXT },
+  menuRowText: { fontSize: 17, fontFamily: FONT.semibold, color: MENU_TEXT },
   logoutRow: {
     marginTop: 4,
   },
   logoutText: {
     fontSize: 17,
-    fontWeight: '600',
+    fontFamily: FONT.semibold,
     color: DESTRUCTIVE_ON_NAVY,
   },
 });

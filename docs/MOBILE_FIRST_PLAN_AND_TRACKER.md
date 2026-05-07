@@ -32,7 +32,7 @@
 | **Native app implementation** | Dealer RN screens and navigation for **phones and tablets** | `apps/mobile/` |
 | **Shared UI package (optional growth)** | Cross-cutting primitives when you intentionally extract them | `packages/ui/` |
 
-**How to use `DESIGN_SYSTEM.md` in the native app:** mirror **semantics**, not every web pixel — same primary action color, same structural text color, same success/warning/danger meaning, consistent card/list rhythm and touch-friendly density on **both phone and tablet widths**. New dealer-facing screens should **start from** those tokens (today many hex values are duplicated per file in `apps/mobile`; consolidating into one theme module is a baseline task below).
+**How to use `DESIGN_SYSTEM.md` in the native app:** mirror **semantics**, not every web pixel — same primary action color, same structural text color, same success/warning/danger meaning, **typography roles from the type ladder** (page vs section vs body vs caption; Inter on web, system sans acceptable on native unless you bundle Inter), consistent card/list rhythm and touch-friendly density on **both phone and tablet widths**. New dealer-facing screens should **start from** those tokens (today many hex values are duplicated per file in `apps/mobile`; consolidating into one theme module is a baseline task below).
 
 ---
 
@@ -147,6 +147,7 @@ Fill every Friday (or Monday):
 | Date | Note |
 |------|------|
 | _(example)_ 2026-05-01 | Plan file created; migration checklist complete on main |
+| 2026-05-03 | Dealer mobile Wave 2 progress recorded in **`docs/MOBILE_UX_WAVE2.md`** (screen trackers + progress log): dashboard rows 1–11 done, inventory grid, products **Sort** / **Filter**, product detail gallery + transaction preview/history route, stock-alerts/activity copy parity; open items called out there (e.g. dashboard search filter #12, sticky detail actions, list-row stock path). |
 | | |
 
 ---

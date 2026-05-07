@@ -14,6 +14,7 @@ This file is the master tracker for behavior contracts across SupplySync.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | INV-HIST | Inventory History Normalization | `docs/contracts/INV-HIST_normalized-transaction-history.md` | Product + Backend | active | Phase 1 |  |  |  |
 | STEP15 | Post-Pilot Hardening and Admin Baseline | `docs/contracts/STEP15_post-pilot-hardening-and-admin-baseline.md` | Engineering | active | Step 15 |  |  |  |
+| RPT-ADAPT | Adaptive Dealer Reports | `docs/contracts/RPT-ADAPT_adaptive-dealer-reports.md` | Product + Backend + Mobile/Web | active | 2026-05-05 |  |  |  |
 
 ## Status definitions
 

@@ -50,31 +50,64 @@
 
 ## ✍️ Typography
 
-### Font Stack
+### Primary font
 
-**Headings: Manrope**
-- Modern, geometric, distinctive
-- Weights: 600 (Semibold), 700 (Bold)
-- Usage: Page titles, section headers, card titles
+**Inter** — one family for navigation, headings, body, and UI. Neutral, readable at small sizes, works across dealer dashboards and forms.
 
-**Body Text: Public Sans**
-- Neutral, highly legible (excellent for data tables)
-- Weights: 400 (Regular), 500 (Medium), 600 (Semibold)
-- Usage: Paragraphs, labels, table data, forms
+**Weights in use**
 
-### Type Scale
+| Weight name | CSS value | Typical use |
+|-------------|-----------|-------------|
+| Regular | 400 | Body, captions, labels |
+| Medium | 500 | Section titles, nav, table headers, badges |
+| SemiBold | 600 | Page titles, buttons, empty-state titles |
+| Bold | 700 | Data numbers / KPIs |
 
-```
-Display (Hero): 48px / 3rem - Bold
-H1 (Page Title): 36px / 2.25rem - Bold
-H2 (Section): 30px / 1.875rem - Semibold
-H3 (Card Header): 24px / 1.5rem - Semibold
-H4 (Subsection): 20px / 1.25rem - Semibold
-Body Large: 18px / 1.125rem - Regular
-Body: 16px / 1rem - Regular
-Body Small: 14px / 0.875rem - Regular
-Caption: 12px / 0.75rem - Medium
-```
+### Web sizing rule
+
+Sizes in the ladder are **bands**, not fixed requirements. Pick any value **inside** a band per screen density, breakpoint, or product need. Preserve **hierarchy**: a lower role should not routinely look heavier or larger than the role above it (e.g. a caption should not compete with a section title).
+
+### When to use the **top** of a size band
+
+Prefer the **larger** end of the range when:
+
+- Layout is **desktop / wide** and headings benefit from slightly more presence.
+- The line is **short** (single-line title, KPI label + number).
+- You are honoring **user scaling / accessibility** preferences.
+
+Prefer the **smaller** end when:
+
+- The surface is **dense** (tables, filters, multi-column admin).
+- Text is **secondary** (helper lines under a primary label).
+- **Vertical space** on mobile is tight, without shrinking body text below a comfortable minimum.
+
+### Type ladder
+
+| Element | Size (band) | Weight |
+|---------|-------------|--------|
+| Page title | 24–28px | SemiBold |
+| Section title | 18–20px | Medium |
+| Data numbers / KPIs | 20–28px | Bold |
+| Body text | 14–16px | Regular |
+| Labels | 12–13px | Regular |
+| Buttons | 14–16px | SemiBold |
+| Caption | 12–13px | Regular |
+| Nav | 14–15px | Medium |
+| Table header | 12–13px | Medium |
+| Badge | 11–12px | Medium |
+| Empty state title | 18–20px | SemiBold |
+
+**KPI vs page title:** Data numbers may sit in the same numeric band as page titles; keep titles dominant with **weight** (SemiBold vs Bold on numbers is acceptable) and **copy length** — titles stay concise; KPIs stay numeric or short labels.
+
+### Line-height (guidance)
+
+- Page / section titles: **~1.2–1.25**
+- Body: **~1.45–1.5**
+- Caption / badge: **~1.3–1.4**
+
+### Native app (`apps/mobile`)
+
+**Inter** is loaded in `app/_layout.js` (weights 400–700). Use `FONT.regular` | `FONT.medium` | `FONT.semibold` | `FONT.bold` from `theme/typography.js` for weighted text so Android picks the correct face (avoid relying on `fontWeight` alone). Match **roles and hierarchy** from this ladder; pixel sizes follow the same bands where practical.
 
 ---
 
@@ -507,8 +540,8 @@ module.exports = {
         }
       },
       fontFamily: {
-        sans: ['Public Sans', 'system-ui', 'sans-serif'],
-        display: ['Manrope', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Inter', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         'card': '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
@@ -526,19 +559,22 @@ Use shadcn/ui components as base, customize with:
 - Border radius: 8px (default)
 - Focus ring: Orange
 
-### Font Installation
+### Font Installation (web)
+
+**Option A — Google Fonts** (see `frontend/public/index.html`): load **Inter** with weights **400, 500, 600, 700**.
+
+**Option B — npm**
 
 ```bash
-npm install @fontsource/manrope @fontsource/public-sans
+npm install @fontsource/inter
 ```
 
 ```javascript
 // In main App.js or index.js
-import '@fontsource/manrope/600.css';
-import '@fontsource/manrope/700.css';
-import '@fontsource/public-sans/400.css';
-import '@fontsource/public-sans/500.css';
-import '@fontsource/public-sans/600.css';
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
 ```
 
 ---
@@ -558,7 +594,7 @@ Before development, confirm:
 
 ---
 
-**Design System Version:** 1.0  
-**Last Updated:** March 2026  
+**Design System Version:** 1.1  
+**Last Updated:** May 2026  
 **Status:** Ready for Development
 
