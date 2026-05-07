@@ -23,7 +23,7 @@ from models import (
     SurfaceType, ApplicationType, BodyType, Quality, Category, Size, ProductTransaction, ProductActivityLog, ProductImage
 )
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from sqlalchemy.exc import IntegrityError
 from typing import List
 from services.transaction_reconciliation import (
@@ -117,6 +117,9 @@ TEAM_MEMBER_OTP_REQUEST_WINDOW_SECONDS = int(os.environ.get("TEAM_MEMBER_OTP_REQ
 TEAM_MEMBER_OTP_REQUEST_MAX_ATTEMPTS = int(os.environ.get("TEAM_MEMBER_OTP_REQUEST_MAX_ATTEMPTS", "5"))
 TEAM_MEMBER_OTP_VERIFY_WINDOW_SECONDS = int(os.environ.get("TEAM_MEMBER_OTP_VERIFY_WINDOW_SECONDS", "900"))
 TEAM_MEMBER_OTP_VERIFY_MAX_ATTEMPTS = int(os.environ.get("TEAM_MEMBER_OTP_VERIFY_MAX_ATTEMPTS", "10"))
+OTP_PROVIDER = os.environ.get("OTP_PROVIDER", "auto").strip().lower()
+TWOFACTOR_API_KEY = os.environ.get("TWOFACTOR_API_KEY")
+TWOFACTOR_TEMPLATE_NAME = os.environ.get("TWOFACTOR_TEMPLATE_NAME")
 DEFAULT_PHONE_REGION = os.environ.get("DEFAULT_PHONE_REGION", "IN").strip().upper()
 _PHONE_DIAL_CODES = {
     "IN": "91",
@@ -604,6 +607,22 @@ def _is_twilio_verify_configured() -> bool:
     return bool(account_sid and auth_token and verify_service_sid)
 
 
+def _is_twofactor_configured() -> bool:
+    return bool(TWOFACTOR_API_KEY)
+
+
+def _get_otp_provider() -> str:
+    if OTP_PROVIDER in {"2factor", "twofactor"}:
+        return "2factor" if _is_twofactor_configured() else "unavailable"
+    if OTP_PROVIDER == "twilio":
+        return "twilio" if _is_twilio_verify_configured() else "unavailable"
+    if _is_twofactor_configured():
+        return "2factor"
+    if _is_twilio_verify_configured():
+        return "twilio"
+    return "dev" if APP_ENV != "production" else "unavailable"
+
+
 def _get_twilio_verify_config() -> tuple[Optional[str], Optional[str], Optional[str]]:
     return (
         os.environ.get("TWILIO_ACCOUNT_SID"),
@@ -616,6 +635,63 @@ def _generate_login_otp() -> str:
     return f"{random.randint(100000, 999999)}"
 
 
+def _twofactor_phone_param(phone_e164: str) -> str:
+    digits = _normalize_phone(phone_e164)
+    # 2Factor.in examples commonly use 10-digit Indian numbers. Keep E.164
+    # support for other enabled countries by using full digits for non-IN.
+    if digits.startswith("91") and len(digits) == 12:
+        return digits[-10:]
+    return digits
+
+
+def _send_twofactor_otp(phone_e164: str) -> Optional[str]:
+    if not TWOFACTOR_API_KEY:
+        logging.error("2Factor OTP send requested without TWOFACTOR_API_KEY")
+        return None
+
+    phone_param = _twofactor_phone_param(phone_e164)
+    url = f"https://2factor.in/API/V1/{TWOFACTOR_API_KEY}/SMS/{phone_param}/AUTOGEN"
+    if TWOFACTOR_TEMPLATE_NAME:
+        url = f"{url}/{TWOFACTOR_TEMPLATE_NAME}"
+
+    try:
+        response = requests.get(url, timeout=15)
+        if not (200 <= response.status_code < 300):
+            logging.error("2Factor OTP send failed (%s): %s", response.status_code, response.text)
+            return None
+        payload = response.json()
+        if payload.get("Status") != "Success":
+            logging.error("2Factor OTP send rejected: %s", payload)
+            return None
+        return payload.get("Details")
+    except requests.RequestException as exc:
+        logging.error("2Factor OTP send exception: %s", exc)
+        return None
+    except ValueError:
+        logging.error("2Factor OTP send returned non-JSON response: %s", response.text)
+        return None
+
+
+def _verify_twofactor_otp(session_id: str, otp: str) -> bool:
+    if not TWOFACTOR_API_KEY:
+        logging.error("2Factor OTP verify requested without TWOFACTOR_API_KEY")
+        return False
+
+    url = f"https://2factor.in/API/V1/{TWOFACTOR_API_KEY}/SMS/VERIFY/{session_id}/{otp}"
+    try:
+        response = requests.get(url, timeout=15)
+        if not (200 <= response.status_code < 300):
+            logging.warning("2Factor OTP verify non-success (%s): %s", response.status_code, response.text)
+            return False
+        payload = response.json()
+        return payload.get("Status") == "Success"
+    except requests.RequestException as exc:
+        logging.error("2Factor OTP verify exception: %s", exc)
+        return False
+    except ValueError:
+        return False
+
+
 def _store_login_otp(normalized_phone: str, otp: str) -> None:
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(seconds=LOGIN_OTP_EXPIRE_SECONDS)
@@ -623,6 +699,18 @@ def _store_login_otp(normalized_phone: str, otp: str) -> None:
         _LOGIN_OTP_STORE[normalized_phone] = {
             "otp": otp,
             "expires_at": expires_at,
+            "attempts": 0,
+        }
+        _LOGIN_OTP_LAST_SENT_AT[normalized_phone] = now
+
+
+def _store_login_otp_session(normalized_phone: str, provider: str, session_id: str) -> None:
+    now = datetime.now(timezone.utc)
+    with _LOGIN_OTP_LOCK:
+        _LOGIN_OTP_STORE[normalized_phone] = {
+            "provider": provider,
+            "session_id": session_id,
+            "expires_at": now + timedelta(seconds=LOGIN_OTP_EXPIRE_SECONDS),
             "attempts": 0,
         }
         _LOGIN_OTP_LAST_SENT_AT[normalized_phone] = now
@@ -710,11 +798,48 @@ def _validate_login_otp(normalized_phone: str, otp: str) -> bool:
         return True
 
 
+def _validate_login_otp_session(normalized_phone: str, otp: str) -> bool:
+    now = datetime.now(timezone.utc)
+    with _LOGIN_OTP_LOCK:
+        record = _LOGIN_OTP_STORE.get(normalized_phone)
+        if not record:
+            return False
+        if now > record["expires_at"]:
+            _LOGIN_OTP_STORE.pop(normalized_phone, None)
+            return False
+        if record["attempts"] >= LOGIN_OTP_MAX_VERIFY_ATTEMPTS:
+            _LOGIN_OTP_STORE.pop(normalized_phone, None)
+            return False
+        record["attempts"] += 1
+        provider = record.get("provider")
+        session_id = record.get("session_id")
+
+    is_valid = False
+    if provider == "2factor" and session_id:
+        is_valid = _verify_twofactor_otp(session_id=session_id, otp=otp)
+
+    if is_valid:
+        with _LOGIN_OTP_LOCK:
+            _LOGIN_OTP_STORE.pop(normalized_phone, None)
+    return is_valid
+
+
 def _store_team_member_otp(request_id: str, otp: str) -> None:
     now = datetime.now(timezone.utc)
     with _TEAM_MEMBER_OTP_LOCK:
         _TEAM_MEMBER_OTP_STORE[request_id] = {
             "otp": otp,
+            "expires_at": now + timedelta(seconds=TEAM_MEMBER_OTP_EXPIRE_SECONDS),
+            "attempts": 0,
+        }
+
+
+def _store_team_member_otp_session(request_id: str, provider: str, session_id: str) -> None:
+    now = datetime.now(timezone.utc)
+    with _TEAM_MEMBER_OTP_LOCK:
+        _TEAM_MEMBER_OTP_STORE[request_id] = {
+            "provider": provider,
+            "session_id": session_id,
             "expires_at": now + timedelta(seconds=TEAM_MEMBER_OTP_EXPIRE_SECONDS),
             "attempts": 0,
         }
@@ -737,6 +862,32 @@ def _validate_team_member_otp(request_id: str, otp: str) -> bool:
             return False
         _TEAM_MEMBER_OTP_STORE.pop(request_id, None)
         return True
+
+
+def _validate_team_member_otp_session(request_id: str, otp: str) -> bool:
+    now = datetime.now(timezone.utc)
+    with _TEAM_MEMBER_OTP_LOCK:
+        record = _TEAM_MEMBER_OTP_STORE.get(request_id)
+        if not record:
+            return False
+        if now > record["expires_at"]:
+            _TEAM_MEMBER_OTP_STORE.pop(request_id, None)
+            return False
+        if record["attempts"] >= TEAM_MEMBER_OTP_VERIFY_MAX_ATTEMPTS:
+            _TEAM_MEMBER_OTP_STORE.pop(request_id, None)
+            return False
+        record["attempts"] += 1
+        provider = record.get("provider")
+        session_id = record.get("session_id")
+
+    is_valid = False
+    if provider == "2factor" and session_id:
+        is_valid = _verify_twofactor_otp(session_id=session_id, otp=otp)
+
+    if is_valid:
+        with _TEAM_MEMBER_OTP_LOCK:
+            _TEAM_MEMBER_OTP_STORE.pop(request_id, None)
+    return is_valid
 
 
 def _mark_team_member_otp_sent(merchant_phone: str) -> None:
@@ -839,8 +990,17 @@ def _request_otp_for_action(
         expires_seconds=TEAM_MEMBER_OTP_EXPIRE_SECONDS,
     )
 
-    twilio_configured = _is_twilio_verify_configured()
-    if twilio_configured:
+    provider = _get_otp_provider()
+    if provider == "2factor":
+        session_id = _send_twofactor_otp(merchant_phone_e164)
+        if not session_id:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OTP service unavailable. Please try again shortly.",
+            )
+        _store_team_member_otp_session(request_id=request_id, provider=provider, session_id=session_id)
+        _mark_team_member_otp_sent(merchant_phone_key)
+    elif provider == "twilio":
         sent = _send_twilio_login_otp(merchant_phone_e164)
         if not sent:
             raise HTTPException(
@@ -848,23 +1008,23 @@ def _request_otp_for_action(
                 detail="OTP service unavailable. Please try again shortly.",
             )
         _mark_team_member_otp_sent(merchant_phone_key)
-    else:
-        if APP_ENV == "production":
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="OTP service unavailable. Please contact support.",
-            )
+    elif provider == "dev":
         otp = _generate_login_otp()
         _store_team_member_otp(request_id=request_id, otp=otp)
         _mark_team_member_otp_sent(merchant_phone_key)
         logging.info("Generated OTP for action=%s request_id=%s", action_type, request_id)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OTP service unavailable. Please contact support.",
+        )
 
     response = {
         "message": request_success_message,
         "request_id": request_id,
         "cooldown_seconds": TEAM_MEMBER_OTP_RESEND_COOLDOWN_SECONDS,
     }
-    if APP_ENV != "production" and not twilio_configured:
+    if provider == "dev":
         response["dev_only_otp"] = otp
     return response
 
@@ -907,12 +1067,18 @@ def _confirm_otp_for_action(
             detail="Too many OTP verification attempts. Please try again later.",
         )
 
-    twilio_configured = _is_twilio_verify_configured()
-    is_valid = (
-        _verify_twilio_login_otp(merchant_phone_e164, otp_value)
-        if twilio_configured
-        else _validate_team_member_otp(request_id, otp_value)
-    )
+    provider = _get_otp_provider()
+    if provider == "2factor":
+        is_valid = _validate_team_member_otp_session(request_id, otp_value)
+    elif provider == "twilio":
+        is_valid = _verify_twilio_login_otp(merchant_phone_e164, otp_value)
+    elif provider == "dev":
+        is_valid = _validate_team_member_otp(request_id, otp_value)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OTP service unavailable. Please contact support.",
+        )
     if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -1055,8 +1221,16 @@ async def request_login_otp(
     if not user or not user.is_active:
         return generic_response
 
-    twilio_configured = _is_twilio_verify_configured()
-    if twilio_configured:
+    provider = _get_otp_provider()
+    if provider == "2factor":
+        session_id = _send_twofactor_otp(phone_e164)
+        if not session_id:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OTP service unavailable. Please try again shortly.",
+            )
+        _store_login_otp_session(normalized_phone=phone_key, provider=provider, session_id=session_id)
+    elif provider == "twilio":
         sent = _send_twilio_login_otp(phone_e164)
         if not sent:
             raise HTTPException(
@@ -1064,17 +1238,17 @@ async def request_login_otp(
                 detail="OTP service unavailable. Please try again shortly.",
             )
         _mark_otp_sent(phone_key)
-    else:
-        if APP_ENV == "production":
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="OTP service unavailable. Please contact support.",
-            )
+    elif provider == "dev":
         otp = _generate_login_otp()
         _store_login_otp(normalized_phone=phone_key, otp=otp)
         logging.info("Generated dev login OTP for %s", phone_key)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OTP service unavailable. Please contact support.",
+        )
 
-    if APP_ENV != "production" and not twilio_configured:
+    if provider == "dev":
         return {**generic_response, "dev_only_otp": otp}
     return {**generic_response, "cooldown_seconds": LOGIN_OTP_RESEND_COOLDOWN_SECONDS}
 
@@ -1099,12 +1273,18 @@ async def verify_login_otp(
         )
 
     otp_value = (request.otp or "").strip()
-    twilio_configured = _is_twilio_verify_configured()
-    is_otp_valid = (
-        _verify_twilio_login_otp(phone_e164, otp_value)
-        if twilio_configured
-        else _validate_login_otp(normalized_phone=phone_key, otp=otp_value)
-    )
+    provider = _get_otp_provider()
+    if provider == "2factor":
+        is_otp_valid = _validate_login_otp_session(normalized_phone=phone_key, otp=otp_value)
+    elif provider == "twilio":
+        is_otp_valid = _verify_twilio_login_otp(phone_e164, otp_value)
+    elif provider == "dev":
+        is_otp_valid = _validate_login_otp(normalized_phone=phone_key, otp=otp_value)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OTP service unavailable. Please contact support.",
+        )
     if not is_otp_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -3375,22 +3555,41 @@ async def get_product_images(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    images = db.query(ProductImage).filter(
-        ProductImage.product_id == product_id
-    ).order_by(ProductImage.ordering).all()
-    
-    return [{
-        "id": str(img.id),
-        "image_url": img.image_url,
-        "is_primary": img.is_primary,
-        "ordering": img.ordering,
-        "storage_type": img.storage_type,
-        "dominant_color": img.dominant_color,
-        "color_palette": img.color_palette,
-        "width_px": img.width_px,
-        "height_px": img.height_px,
-        "created_at": img.created_at.isoformat() if img.created_at else None
-    } for img in images]
+    # Legacy-transfer-safe: product_images schema can differ across environments.
+    # Select only broadly available columns and alias uploaded_at to created_at for clients.
+    images = db.execute(
+        text(
+            """
+            select
+                id,
+                image_url,
+                coalesce(is_primary, false) as is_primary,
+                ordering,
+                uploaded_at as created_at
+            from product_images
+            where product_id = :product_id
+              and image_url is not null
+              and image_url <> ''
+            order by
+                case when coalesce(is_primary, false) then 0 else 1 end,
+                coalesce(ordering, 999999),
+                uploaded_at,
+                id
+            """
+        ),
+        {"product_id": product_id},
+    ).fetchall()
+
+    return [
+        {
+            "id": str(img.id),
+            "image_url": img.image_url,
+            "is_primary": bool(img.is_primary),
+            "ordering": img.ordering,
+            "created_at": img.created_at.isoformat() if img.created_at else None,
+        }
+        for img in images
+    ]
 
 @api_router.put("/dealer/products/{product_id}/images/{image_id}/primary")
 async def set_primary_image(
