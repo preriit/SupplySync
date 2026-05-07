@@ -8,6 +8,7 @@ const mobileRoot = path.resolve(__dirname, '..');
 
 const requiredFiles = [
   'app/login.js',
+  'app/signup.js',
   'app/dashboard.js',
   'app/inventory/index.js',
   'app/inventory/[subcategoryId]/products.js',
