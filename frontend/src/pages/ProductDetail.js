@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { webStorage } from '@supplysync/core';
 import DealerPageShell from '../components/DealerPageShell';
@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
   Edit, Trash2, Save, X, Package, Grid3x3, 
-  Box, Calendar, History, Plus, FileEdit, ArrowUp, ArrowDown, RefreshCw, ArrowLeft
+  Box, Calendar, History, Plus, FileEdit, ArrowUp, ArrowDown, RefreshCw, ArrowLeft, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import {
   Select,
@@ -84,6 +84,8 @@ const ProductDetail = () => {
   
   // Product images
   const [images, setImages] = useState([]);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [touchStartX, setTouchStartX] = useState(null);
   const [recentTransactions, setRecentTransactions] = useState([]);
 
   const fetchImages = useCallback(async () => {
@@ -306,6 +308,49 @@ const ProductDetail = () => {
     return `${day}/${month}/${year} ${time}`;
   };
   const productSizeLabel = product?.size_mm || 'N/A';
+  const galleryImages = useMemo(
+    () => (images || []).filter((img) => !!img?.image_url),
+    [images]
+  );
+  const safeImageIndex = galleryImages.length
+    ? Math.min(activeImageIndex, galleryImages.length - 1)
+    : 0;
+  const activeImage = galleryImages[safeImageIndex];
+
+  useEffect(() => {
+    if (!galleryImages.length) {
+      setActiveImageIndex(0);
+      return;
+    }
+    if (activeImageIndex > galleryImages.length - 1) {
+      setActiveImageIndex(0);
+    }
+  }, [galleryImages, activeImageIndex]);
+
+  const goPrevImage = () => {
+    if (galleryImages.length <= 1) return;
+    setActiveImageIndex((prev) => (prev - 1 + galleryImages.length) % galleryImages.length);
+  };
+
+  const goNextImage = () => {
+    if (galleryImages.length <= 1) return;
+    setActiveImageIndex((prev) => (prev + 1) % galleryImages.length);
+  };
+
+  const handleImageTouchStart = (e) => {
+    setTouchStartX(e.touches?.[0]?.clientX ?? null);
+  };
+
+  const handleImageTouchEnd = (e) => {
+    if (touchStartX == null || galleryImages.length <= 1) return;
+    const endX = e.changedTouches?.[0]?.clientX ?? null;
+    if (endX == null) return;
+    const delta = endX - touchStartX;
+    if (Math.abs(delta) < 40) return;
+    if (delta > 0) goPrevImage();
+    else goNextImage();
+    setTouchStartX(null);
+  };
 
   if (loading) {
     return (
@@ -407,18 +452,52 @@ const ProductDetail = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="aspect-video rounded-md border border-app-border bg-slate-50 overflow-hidden">
-                {images?.[0]?.image_url ? (
-                  <img src={images[0].image_url} alt="Primary product" className="h-full w-full object-cover" />
+                {activeImage?.image_url ? (
+                  <div
+                    className="relative h-full w-full"
+                    onTouchStart={handleImageTouchStart}
+                    onTouchEnd={handleImageTouchEnd}
+                  >
+                    <img src={activeImage.image_url} alt="Primary product" className="h-full w-full object-cover" />
+                    {galleryImages.length > 1 ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={goPrevImage}
+                          className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/85 p-1.5 shadow-sm border border-slate-200"
+                          aria-label="Previous image"
+                        >
+                          <ChevronLeft className="h-4 w-4 text-slate-700" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={goNextImage}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/85 p-1.5 shadow-sm border border-slate-200"
+                          aria-label="Next image"
+                        >
+                          <ChevronRight className="h-4 w-4 text-slate-700" />
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
                 ) : (
                   <div className="h-full w-full flex items-center justify-center text-xs text-slate-light">No image</div>
                 )}
               </div>
-              {images.length > 1 ? (
+              {galleryImages.length > 1 ? (
                 <div className="grid grid-cols-4 gap-2">
-                  {images.slice(0, 4).map((img) => (
-                    <div key={img.id} className="aspect-square rounded border border-app-border overflow-hidden">
+                  {galleryImages.slice(0, 8).map((img, idx) => (
+                    <button
+                      key={img.id || idx}
+                      type="button"
+                      className={`aspect-square rounded border overflow-hidden ${
+                        idx === safeImageIndex ? 'border-orange ring-1 ring-orange/40' : 'border-app-border'
+                      }`}
+                      onClick={() => setActiveImageIndex(idx)}
+                      aria-label={`Show image ${idx + 1}`}
+                    >
                       <img src={img.image_url} alt="Thumbnail" className="h-full w-full object-cover" />
-                    </div>
+                    </button>
                   ))}
                 </div>
               ) : null}

@@ -19,6 +19,7 @@ This roadmap is intentionally lightweight. Reprioritize weekly based on user fee
 - Mobile UX direction: see `docs/MOBILE_UX_WAVE2.md`.
 - Adaptive dealer report logic and API behavior contract: see `docs/contracts/RPT-ADAPT_adaptive-dealer-reports.md`.
 - Transaction history window and Phase 2 export plan: see `docs/TRANSACTION_HISTORY_POLICY.md`.
+- Image strategy for future search/matching/reporting: see `docs/IMAGE_INTELLIGENCE_FUTURE_PLAYBOOK.md`.
 
 ### Why this matters (plain terms)
 - We can now build many features once in shared code, instead of rewriting logic per platform.

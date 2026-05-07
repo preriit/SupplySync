@@ -9,7 +9,7 @@ import cloudinary
 import cloudinary.uploader
 from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from PIL import Image
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
@@ -147,24 +147,35 @@ async def get_product_images(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    images = (
-        db.query(ProductImage)
-        .filter(ProductImage.product_id == product_id)
-        .order_by(ProductImage.ordering)
-        .all()
-    )
+    images = db.execute(
+        text(
+            """
+            select
+                id,
+                image_url,
+                coalesce(is_primary, false) as is_primary,
+                ordering,
+                uploaded_at as created_at
+            from product_images
+            where product_id = :product_id
+              and image_url is not null
+              and image_url <> ''
+            order by
+                case when coalesce(is_primary, false) then 0 else 1 end,
+                coalesce(ordering, 999999),
+                uploaded_at,
+                id
+            """
+        ),
+        {"product_id": product_id},
+    ).fetchall()
 
     return [
         {
             "id": str(img.id),
             "image_url": img.image_url,
-            "is_primary": img.is_primary,
+            "is_primary": bool(img.is_primary),
             "ordering": img.ordering,
-            "storage_type": img.storage_type,
-            "dominant_color": img.dominant_color,
-            "color_palette": img.color_palette,
-            "width_px": img.width_px,
-            "height_px": img.height_px,
             "created_at": img.created_at.isoformat() if img.created_at else None,
         }
         for img in images

@@ -46,6 +46,18 @@ function sortProductImages(list) {
   });
 }
 
+function resolveImageUrl(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value.trim();
+  return (
+    value.image_url ||
+    value.public_url ||
+    value.url ||
+    value.primary_image_url ||
+    ''
+  );
+}
+
 function formatTimeAgo(value) {
   if (!value) return 'Just now';
   const dt = new Date(value);
@@ -311,13 +323,26 @@ export default function ProductDetailScreen() {
   const hasMoreTransactions = history.length > TXN_PREVIEW_LIMIT;
 
   const sortedImages = useMemo(() => sortProductImages(images), [images]);
+  const galleryImages = useMemo(() => {
+    const fromRows = sortedImages
+      .map((img, idx) => ({
+        id: img?.id ? String(img.id) : `img-${idx}`,
+        uri: resolveImageUrl(img),
+      }))
+      .filter((img) => !!img.uri);
+
+    if (fromRows.length > 0) return fromRows;
+
+    const fallback = resolveImageUrl(product?.primary_image_url);
+    return fallback ? [{ id: 'primary', uri: fallback }] : [];
+  }, [sortedImages, product?.primary_image_url]);
   const contentWidth = Math.max(0, windowWidth - 32);
-  const safeHeroIndex = sortedImages.length
-    ? Math.min(heroImageIndex, sortedImages.length - 1)
+  const safeHeroIndex = galleryImages.length
+    ? Math.min(heroImageIndex, galleryImages.length - 1)
     : 0;
 
   const openGallery = (index) => {
-    const i = Math.min(Math.max(0, index), Math.max(0, sortedImages.length - 1));
+    const i = Math.min(Math.max(0, index), Math.max(0, galleryImages.length - 1));
     setGalleryIndex(i);
     setGalleryOpen(true);
     requestAnimationFrame(() => {
@@ -415,35 +440,55 @@ export default function ProductDetailScreen() {
 
         {product ? (
           <View style={styles.imageBlock}>
-            {sortedImages.length === 0 ? (
+            {galleryImages.length === 0 ? (
               <View style={[styles.imagePlaceholder, { width: contentWidth }]}>
                 <Ionicons name="image-outline" size={36} color="#94A3B8" />
                 <Text style={styles.imagePlaceholderText}>No photos yet</Text>
               </View>
             ) : (
               <>
-                <Pressable
-                  onPress={() => openGallery(safeHeroIndex)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`View product photo ${safeHeroIndex + 1} of ${sortedImages.length}`}
-                >
-                  <Image
-                    source={{ uri: sortedImages[safeHeroIndex].image_url }}
-                    style={[styles.heroImage, { width: contentWidth }]}
-                    resizeMode="cover"
-                  />
-                </Pressable>
-                {sortedImages.length > 1 ? (
+                <FlatList
+                  data={galleryImages}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  keyExtractor={(item) => item.id}
+                  getItemLayout={(_, index) => ({
+                    length: contentWidth,
+                    offset: contentWidth * index,
+                    index,
+                  })}
+                  initialScrollIndex={safeHeroIndex}
+                  onMomentumScrollEnd={(e) => {
+                    const x = e.nativeEvent.contentOffset.x;
+                    const idx = Math.round(x / contentWidth);
+                    setHeroImageIndex(Math.min(Math.max(0, idx), galleryImages.length - 1));
+                  }}
+                  renderItem={({ item, index }) => (
+                    <Pressable
+                      onPress={() => openGallery(index)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`View product photo ${index + 1} of ${galleryImages.length}`}
+                    >
+                      <Image
+                        source={{ uri: item.uri }}
+                        style={[styles.heroImage, { width: contentWidth }]}
+                        resizeMode="cover"
+                      />
+                    </Pressable>
+                  )}
+                />
+                {galleryImages.length > 1 ? (
                   <View style={styles.thumbRow}>
-                    {sortedImages.map((img, i) => (
+                    {galleryImages.map((img, i) => (
                       <Pressable
-                        key={String(img.id)}
+                        key={img.id}
                         onPress={() => setHeroImageIndex(i)}
                         style={[styles.thumbWrap, i === safeHeroIndex && styles.thumbWrapActive]}
                         accessibilityRole="button"
                         accessibilityLabel={`Show photo ${i + 1}`}
                       >
-                        <Image source={{ uri: img.image_url }} style={styles.thumbImage} resizeMode="cover" />
+                        <Image source={{ uri: img.uri }} style={styles.thumbImage} resizeMode="cover" />
                       </Pressable>
                     ))}
                   </View>
@@ -656,18 +701,18 @@ export default function ProductDetailScreen() {
               <Ionicons name="close" size={28} color="#F8FAFC" />
             </Pressable>
           </View>
-          {sortedImages.length > 0 ? (
+          {galleryImages.length > 0 ? (
             <>
               <FlatList
                 ref={galleryListRef}
                 style={styles.galleryList}
-                data={sortedImages}
+                data={galleryImages}
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
-                keyExtractor={(item) => String(item.id)}
+                keyExtractor={(item) => item.id}
                 initialScrollIndex={galleryIndex}
-                initialNumToRender={sortedImages.length}
+                initialNumToRender={galleryImages.length}
                 getItemLayout={(_, index) => ({
                   length: windowWidth,
                   offset: windowWidth * index,
@@ -676,7 +721,7 @@ export default function ProductDetailScreen() {
                 onMomentumScrollEnd={(e) => {
                   const x = e.nativeEvent.contentOffset.x;
                   const idx = Math.round(x / windowWidth);
-                  setGalleryIndex(Math.min(Math.max(0, idx), sortedImages.length - 1));
+                  setGalleryIndex(Math.min(Math.max(0, idx), galleryImages.length - 1));
                 }}
                 renderItem={({ item }) => (
                   <View
@@ -689,7 +734,7 @@ export default function ProductDetailScreen() {
                     }}
                   >
                     <Image
-                      source={{ uri: item.image_url }}
+                      source={{ uri: item.uri }}
                       style={{
                         width: windowWidth - 32,
                         height: windowHeight - 220,
@@ -700,7 +745,7 @@ export default function ProductDetailScreen() {
                 )}
               />
               <Text style={styles.galleryCounter}>
-                {galleryIndex + 1} / {sortedImages.length}
+                {galleryIndex + 1} / {galleryImages.length}
               </Text>
             </>
           ) : null}

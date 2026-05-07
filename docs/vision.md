@@ -37,6 +37,9 @@ SupplySync aims to provide a simple, reliable operating system for inventory pla
 - Prefer explainable suggestions over black-box recommendations.
 - Optimize for reliability first, sophistication second.
 - Build for gradual adoption: simple defaults, advanced controls later.
+- Build image intelligence in phases: metadata first, user-facing AI next.
+
+See `docs/IMAGE_INTELLIGENCE_FUTURE_PLAYBOOK.md` for future image search/matching/reporting direction.
 
 ## 7) Out of Scope (Current Stage)
 - Fully automated autonomous purchasing without user approval.
@@ -51,3 +54,4 @@ SupplySync aims to provide a simple, reliable operating system for inventory pla
 ## 9) Revision Log
 - 2026-04-30: Initial version created.
 - 2026-05-05: Added dealer-level daily sales aggregation and regional benchmark insight direction.
+- 2026-05-07: Added image intelligence future playbook reference.
